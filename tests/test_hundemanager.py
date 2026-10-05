@@ -407,7 +407,7 @@ class UpdateTests(unittest.TestCase):
                    HUNDEMANAGER_PORT=str(self.port),
                    HUNDEMANAGER_RELEASES_URL=self.github.url,
                    HUNDEMANAGER_BACKUP_ZWEITER_ORT=self.zweiter_ort,
-                   HUNDEMANAGER_KEIN_BROWSER='1')
+                   HUNDEMANAGER_KEIN_BROWSER='1', **getattr(self, 'extra_env', {}))
         env.pop('HUNDEMANAGER_LAUNCHER', None)
         optionen = {'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP} if WINDOWS else {'start_new_session': True}
         self.log = open(self.log_pfad, 'w', encoding='utf-8')
@@ -514,6 +514,22 @@ class UpdateTests(unittest.TestCase):
         anfrage = urllib.request.Request(self.url('/update/pruefen'), data=b'', method='POST')
         with self.browser.open(anfrage, timeout=30) as a:
             self.assertIn('auf dem neuesten Stand', a.read().decode('utf-8'))
+
+    def test_neues_release_erscheint_ohne_neustart(self):
+        """Ein Release, das erst kommt, während die App läuft, taucht oben rechts auf."""
+        self.github = GitHubNachbau(self.ALT, release_zip(self.NEU))
+        self.extra_env = {'HUNDEMANAGER_PRUEF_INTERVALL': '1'}
+        self.starten()
+        self.assertIn('Updates suchen', self.seite('/update/kopf'))
+        self.assertIn("fetch('/update/kopf'", self.seite())  # offene Seite fragt nach
+
+        self.github.version = self.NEU
+        ende = time.time() + 30
+        while 'Neue Version 9.9.9 installieren' not in self.seite('/update/kopf'):
+            if time.time() > ende:
+                self.fail('Neues Release wurde nicht erkannt')
+            time.sleep(0.5)
+        self.assertIn('Neue Version 9.9.9 installieren', self.seite())
 
     def test_kaputtes_programm_wird_zurueckgenommen(self):
         db_anlegen(self.db)

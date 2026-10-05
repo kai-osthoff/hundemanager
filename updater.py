@@ -27,7 +27,9 @@ import backup
 GITHUB_REPO = 'kai-osthoff/hundemanager'
 RELEASES_URL = os.environ.get(
     'HUNDEMANAGER_RELEASES_URL', f'https://api.github.com/repos/{GITHUB_REPO}/releases/latest')
-PRUEF_INTERVALL = 6 * 60 * 60  # alle 6 Stunden automatisch nachsehen
+# Alle 10 Minuten bei GitHub nachsehen - die offene Seite fragt jede Minute nach,
+# ein neues Release ist also spätestens nach ~11 Minuten oben rechts zu sehen
+PRUEF_INTERVALL = int(os.environ.get('HUNDEMANAGER_PRUEF_INTERVALL') or 10 * 60)
 
 APP_DIR = backup.APP_DIR
 # Pflichtdateien - fehlt eine im Download, wird das Update gar nicht erst begonnen

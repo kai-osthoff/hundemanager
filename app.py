@@ -825,6 +825,12 @@ def update_pruefen():
     return redirect(url_for('index'))
 
 
+@app.route('/update/kopf')
+def update_kopf():
+    """Nur der Update-Knopf - offene Seiten fragen ihn jede Minute nach."""
+    return render_template('_update_kopf.html')
+
+
 @app.route('/update/installieren', methods=['POST'])
 def update_installieren():
     # Vorher laden: nach dem Update liegen auf der Platte schon die neuen Templates,

@@ -1,0 +1,19 @@
+{# Update-Knopf oben rechts - auch einzeln unter /update/kopf, damit offene Seiten ihn nachladen #}
+{% if update_info.verfuegbar %}
+    <div class="update-kopf" data-stand="{{ update_info.version }}">
+        <form action="{{ url_for('update_installieren') }}" method="POST"
+              onsubmit="this.querySelector('button').disabled = true; this.querySelector('button').textContent = 'Update läuft …';">
+            <button type="submit" class="btn-rund btn-hell">🎉 Neue Version {{ update_info.version }} installieren</button>
+        </form>
+        {% if update_info.notizen %}
+            <details>
+                <summary>Was ist neu?</summary>
+                <pre>{{ update_info.notizen }}</pre>
+            </details>
+        {% endif %}
+    </div>
+{% else %}
+    <form action="{{ url_for('update_pruefen') }}" method="POST" data-stand="aktuell">
+        <button type="submit" class="btn-rund btn-umriss">Updates suchen</button>
+    </form>
+{% endif %}

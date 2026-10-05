@@ -734,24 +734,7 @@
                 <h1><a href="{{ url_for('index') }}">Hundemanager</a></h1>
                 <div class="kopf-rechts">
                     {% block kopf_aktionen %}{% endblock %}
-                    {% if update_info.verfuegbar %}
-                        <div class="update-kopf">
-                            <form action="{{ url_for('update_installieren') }}" method="POST"
-                                  onsubmit="this.querySelector('button').disabled = true; this.querySelector('button').textContent = 'Update läuft …';">
-                                <button type="submit" class="btn-rund btn-hell">🎉 Neue Version {{ update_info.version }} installieren</button>
-                            </form>
-                            {% if update_info.notizen %}
-                                <details>
-                                    <summary>Was ist neu?</summary>
-                                    <pre>{{ update_info.notizen }}</pre>
-                                </details>
-                            {% endif %}
-                        </div>
-                    {% else %}
-                        <form action="{{ url_for('update_pruefen') }}" method="POST">
-                            <button type="submit" class="btn-rund btn-umriss">Updates suchen</button>
-                        </form>
-                    {% endif %}
+                    <div id="update-bereich">{% include '_update_kopf.html' %}</div>
                 </div>
             </div>
             {% block kopf_inhalt %}{% endblock %}
@@ -804,5 +787,23 @@
         <a href="{{ url_for('nachweise_uebersicht') }}" class="link-button">Nachweise</a>
         <a href="{{ url_for('sicherungen') }}" class="link-button">Sicherungen</a>
     </footer>
+    <script>
+        // Neue Version auch ohne Neuladen anzeigen: jede Minute den Update-Knopf nachfragen.
+        // Fester Pfad statt url_for - ältere Versionen rendern diese Vorlage beim Update mit.
+        setInterval(function () {
+            var bereich = document.getElementById('update-bereich');
+            if (!bereich || bereich.querySelector('button:disabled')) return;  // Update läuft
+            fetch('/update/kopf', {cache: 'no-store'}).then(function (antwort) {
+                return antwort.ok ? antwort.text() : null;
+            }).then(function (html) {
+                if (!html) return;
+                var neu = document.createElement('div');
+                neu.innerHTML = html;
+                var alt_stand = bereich.firstElementChild && bereich.firstElementChild.dataset.stand;
+                var neu_stand = neu.firstElementChild && neu.firstElementChild.dataset.stand;
+                if (neu_stand && neu_stand !== alt_stand) bereich.innerHTML = html;
+            }).catch(function () {});
+        }, 60 * 1000);
+    </script>
 </body>
 </html>
