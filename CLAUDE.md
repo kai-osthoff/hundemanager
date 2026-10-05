@@ -3,11 +3,20 @@
 Flask-App (SQLite) zur Verwaltung von Hunden, Impfungen und Haftpflicht.
 Entwickelt wird von Kai, genutzt von Saskia.
 
-## Plattformen – immer beachten
+## ⚠️ OBERSTE PROJEKTREGEL: Es muss IMMER auf Windows 11 funktionieren
 
-**Entwicklung: macOS. Produktiv: Windows 11 (Saskia).**
-Alles, was ausgeliefert wird, muss unter Windows 11 funktionieren – auch wenn es
-nur auf dem Mac getestet werden kann. Bei jeder Änderung prüfen:
+**Keine Ausnahme.** Saskia nutzt Windows 11 – das ist die einzige Plattform, die zählt.
+Entwickelt wird auf macOS, aber „läuft auf dem Mac“ heißt **nicht** fertig.
+
+- Jede Änderung, jede Datei, jedes Release wird zuerst danach beurteilt, ob sie
+  unter Windows 11 funktioniert. Im Zweifel die Windows-sichere Lösung wählen,
+  auch wenn sie auf dem Mac umständlicher ist.
+- Ein Update kommt per Button direkt bei Saskia an. **Kein Release, solange nicht
+  sicher ist, dass es unter Windows 11 läuft.**
+- Kann etwas nicht unter Windows geprüft werden, das **ausdrücklich** sagen – nie als
+  „getestet“ oder „fertig“ melden, wenn nur macOS getestet wurde.
+
+## Windows-Fallstricke – bei jeder Änderung prüfen
 
 - **Dateien immer mit `encoding='utf-8'` öffnen.** Windows nimmt sonst cp1252
   und Umlaute gehen kaputt.
@@ -22,8 +31,9 @@ nur auf dem Mac getestet werden kann. Bei jeder Änderung prüfen:
   `python3`, keine Shell-Skripte, keine macOS-/Unix-only-Tools in der App.
 - **Nur Python-Standardbibliothek** für Updater und Starter – bei Saskia ist nichts
   außer `requirements.txt` installiert.
-- Nicht unter Windows Getestetes in der Antwort an Kai offen als
-  „nur auf dem Mac getestet“ benennen.
+- Keine Unix-Annahmen: kein `os.fork`, keine Signale außer Strg+C, kein `chmod`,
+  Groß-/Kleinschreibung von Dateinamen nicht unterscheiden (Windows tut es nicht),
+  keine Dateinamen mit `: * ? " < > |`.
 
 ## Lokal entwickeln (macOS)
 
