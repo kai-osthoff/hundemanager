@@ -11,6 +11,7 @@ import http.cookiejar
 import importlib.util
 import io
 import json
+import locale
 import os
 import shutil
 import socket
@@ -28,8 +29,10 @@ from contextlib import closing
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PROGRAMM = ['app.py', 'updater.py', 'backup.py', 'start.py', 'requirements.txt',
-            'README.txt', 'START.bat', 'templates']
+# Alles, was ausgeliefert wird - bewusst keine handgepflegte Liste, damit neue Dateien
+# (z.B. nachweise.py) nicht im Test fehlen
+NICHT_AUSGELIEFERT = {'.git', '.github', '.venv', 'instance', 'tests', '__pycache__', '.DS_Store', 'VERSION'}
+PROGRAMM = sorted(e for e in os.listdir(REPO) if e not in NICHT_AUSGELIEFERT)
 WINDOWS = os.name == 'nt'
 
 
@@ -300,8 +303,11 @@ class UpdateTests(unittest.TestCase):
             fehler = [f for f in getattr(self._outcome.result, 'failures', []) +
                       getattr(self._outcome.result, 'errors', []) if f[0] is self]
             if fehler:
-                with open(self.log_pfad, encoding='utf-8', errors='replace') as f:
-                    print(f'\n----- Ausgabe von {self.id()} -----\n{f.read()}')
+                # Die App schreibt in der Kodierung des Systems (Windows: cp1252)
+                with open(self.log_pfad, encoding=locale.getpreferredencoding(False), errors='replace') as f:
+                    text = f'\n----- Ausgabe von {self.id()} -----\n{f.read()}\n'
+                sys.stdout.buffer.write(text.encode('utf-8', 'replace'))
+                sys.stdout.flush()
         self.tmp.cleanup()
 
     def release(self, zip_daten):
@@ -381,7 +387,7 @@ class UpdateTests(unittest.TestCase):
         self.starten()
 
         self.assertIn('Neue Version 9.9.9', self.seite())
-        self.update_klicken()
+        self.assertIn('wurde installiert', self.update_klicken())
         self.assertEqual(self.warte_auf_neustart(), self.NEU)
 
         self.pruefe_daten_unveraendert()
@@ -403,7 +409,7 @@ class UpdateTests(unittest.TestCase):
         self.release(release_zip(self.NEU, {'app.py': kaputt, 'neue_datei.py': 'x = 1\n'}))
         self.starten()
 
-        self.update_klicken()
+        self.assertIn('wurde installiert', self.update_klicken())
         self.assertEqual(self.warte_auf_neustart(), self.ALT)
 
         self.pruefe_alte_version_wiederhergestellt()
