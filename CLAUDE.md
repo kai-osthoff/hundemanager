@@ -43,6 +43,11 @@ Entwickelt wird auf macOS, aber „läuft auf dem Mac“ heißt **nicht** fertig
 - Saskia läuft immer auf Port 5000.
 - Tests: `.venv/bin/python -m unittest discover -s tests -v` – laufen bei jedem Push
   zusätzlich auf Windows (GitHub Actions, Python 3.11–3.14).
+- **Echtes Windows 11 lokal:** `./windows-test.sh` (optional `-k Muster`) testet in der
+  Parallels-VM „Windows 11“ (ARM64, Python 3.13 x64 wie bei Saskia) – Ergebnis in ~1 Min.
+  Erst hier testen, dann pushen. Die VM hat Defender aktiv: frisch geschriebene Dateien
+  sind kurz gesperrt – Löschen/Ersetzen immer mit Wiederholung (`_mit_wiederholung`).
+  In der VM gibt es kein git; Befehle laufen über `prlctl exec "Windows 11" --current-user`.
 
 ## ⚠️ Daten und Backups – nicht verhandelbar
 

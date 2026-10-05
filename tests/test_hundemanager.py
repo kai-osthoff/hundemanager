@@ -77,6 +77,18 @@ def db_anlegen(pfad, alt=False):
         v.commit()
 
 
+def ordner_loeschen(pfad):
+    """Wie shutil.rmtree - aber Windows 11 sperrt frische Dateien kurz (Defender-Scan)."""
+    for versuch in range(10):
+        try:
+            shutil.rmtree(pfad)
+            return
+        except PermissionError:
+            if versuch == 9:
+                raise
+            time.sleep(0.5)
+
+
 def zaehle(pfad):
     with closing(sqlite3.connect(pfad)) as v:
         return {t: v.execute(f'SELECT COUNT(*) FROM {t}').fetchone()[0] for t in ('person', 'hund')}
@@ -527,7 +539,7 @@ class UpdateTests(unittest.TestCase):
         self.starten()
         # Ab jetzt kann keine Sicherung mehr angelegt werden
         backup_dir = os.path.join(self.app_dir, 'instance', 'backup')
-        shutil.rmtree(backup_dir)
+        ordner_loeschen(backup_dir)
         with open(backup_dir, 'w', encoding='utf-8') as f:
             f.write('im Weg')
 
@@ -557,10 +569,14 @@ class UpdateTests(unittest.TestCase):
 
     def test_update_von_saskias_5_1_0(self):
         """Der echte Übergang bei Saskia: alter Updater und alter Starter aus v5.1.0."""
-        shutil.rmtree(self.app_dir)
+        ordner_loeschen(self.app_dir)
         os.makedirs(self.app_dir)
-        archiv = subprocess.run(['git', 'archive', '--format=zip', 'v5.1.0'], cwd=REPO,
-                                capture_output=True, check=True).stdout
+        vorbereitet = os.environ.get('HUNDEMANAGER_TEST_V510_ZIP')  # windows-test.sh (VM ohne git)
+        if vorbereitet:
+            archiv = lies_bytes(vorbereitet)
+        else:
+            archiv = subprocess.run(['git', 'archive', '--format=zip', 'v5.1.0'], cwd=REPO,
+                                    capture_output=True, check=True).stdout
         with zipfile.ZipFile(io.BytesIO(archiv)) as zf:
             zf.extractall(self.app_dir)
         os.makedirs(os.path.join(self.app_dir, 'instance'))

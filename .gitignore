@@ -16,3 +16,6 @@ dist/
 *.jpg
 *.jpeg
 *.png
+
+# Arbeitsordner von windows-test.sh
+.windows-test/
