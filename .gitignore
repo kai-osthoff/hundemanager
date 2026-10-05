@@ -1,0 +1,12 @@
+# Daten von Saskia - niemals ins Repo
+instance/
+*.db
+
+# Lokale Umgebung
+.venv/
+__pycache__/
+*.pyc
+build/
+dist/
+*.spec
+.DS_Store

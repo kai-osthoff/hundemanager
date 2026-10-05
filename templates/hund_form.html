@@ -1,0 +1,59 @@
+<!-- templates/hund_form.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="form-container">
+    <h2>{{ 'Hund bearbeiten' if hund else 'Neuen Hund anlegen' }}</h2>
+    <p style="color: #6c757d; margin-bottom: 20px;">Besitzer: <strong>{{ person.vollstaendiger_name }}</strong></p>
+    
+    <form method="POST">
+        <div class="form-group">
+            <label for="name" class="required">Name des Hundes</label>
+            <input type="text" id="name" name="name" value="{{ hund.name if hund else '' }}" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="geburtstag">Geburtstag</label>
+            <input type="date" id="geburtstag" name="geburtstag" value="{{ hund.geburtstag.strftime('%Y-%m-%d') if hund and hund.geburtstag else '' }}">
+        </div>
+        
+        <div class="form-group">
+            <label for="gueltig_shp_dap_dhp">Gültigkeit SHP/DAP/DHP</label>
+            <input type="date" id="gueltig_shp_dap_dhp" name="gueltig_shp_dap_dhp" value="{{ hund.gueltig_shp_dap_dhp.strftime('%Y-%m-%d') if hund and hund.gueltig_shp_dap_dhp else '' }}">
+        </div>
+        
+        <div class="form-group">
+            <label for="gueltig_l">Gültigkeit L</label>
+            <input type="date" id="gueltig_l" name="gueltig_l" value="{{ hund.gueltig_l.strftime('%Y-%m-%d') if hund and hund.gueltig_l else '' }}">
+        </div>
+        
+        <div class="form-group">
+            <label for="gueltig_bbpi">Gültigkeit BbPi</label>
+            <input type="date" id="gueltig_bbpi" name="gueltig_bbpi" value="{{ hund.gueltig_bbpi.strftime('%Y-%m-%d') if hund and hund.gueltig_bbpi else '' }}">
+        </div>
+        
+        <div class="form-group">
+            <label for="gueltig_t">Gültigkeit T</label>
+            <input type="date" id="gueltig_t" name="gueltig_t" value="{{ hund.gueltig_t.strftime('%Y-%m-%d') if hund and hund.gueltig_t else '' }}">
+        </div>
+        
+        <div class="form-group">
+            <label for="haftpflicht_gueltig">Gültige Haftpflicht</label>
+            <select id="haftpflicht_gueltig" name="haftpflicht_gueltig">
+                <option value="nein" {{ 'selected' if not (hund and hund.haftpflicht_gueltig) else '' }}>Nein</option>
+                <option value="ja" {{ 'selected' if hund and hund.haftpflicht_gueltig else '' }}>Ja</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="bemerkung">Bemerkung</label>
+            <textarea id="bemerkung" name="bemerkung">{{ hund.bemerkung if hund and hund.bemerkung else '' }}</textarea>
+        </div>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">{{ 'Speichern' if hund else 'Anlegen' }}</button>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">Abbrechen</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

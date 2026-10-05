@@ -1,0 +1,117 @@
+<!-- templates/index.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="actions">
+    <a href="{{ url_for('person_neu') }}" class="btn btn-primary">+ Neue Person</a>
+    <a href="{{ url_for('export_excel') }}" class="btn btn-success">📥 Excel-Export</a>
+	<a href="/?all=1" class="btn btn-secondary">Alle anzeigen</a>
+	<a href="/" class="btn btn-secondary">Nur aktive</a>
+
+</div>
+
+<div class="legende">
+    <div class="legende-item">
+        <div class="legende-farbe legende-gruen"></div>
+        <span>Gültig</span>
+    </div>
+    <div class="legende-item">
+        <div class="legende-farbe legende-orange"></div>
+        <span>Läuft bald ab (< 1 Monat)</span>
+    </div>
+    <div class="legende-item">
+        <div class="legende-farbe legende-rot"></div>
+        <span>Abgelaufen</span>
+    </div>
+</div>
+
+{% if personen %}
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Besitzer</th>
+                <th>Hundename</th>
+                <th>Geburtstag</th>
+                <th>SHP/DAP/DHP</th>
+                <th>L</th>
+                <th>BbPi</th>
+                <th>T</th>
+                <th>Haftpflicht</th>
+                <th>Bemerkung</th>
+                <th>Aktionen</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for person in personen %}
+                <tr class="person-header">
+                    <td colspan="9">
+                        <strong>{{ person.nachname }}, {{ person.vorname }}</strong>
+                    </td>
+                    <td>
+                        <div class="person-actions">
+                            <a href="{{ url_for('person_bearbeiten', person_id=person.id) }}" class="btn btn-secondary btn-sm">✏️</a>
+                            <a href="{{ url_for('hund_neu', person_id=person.id) }}" class="btn btn-primary btn-sm">+ Hund</a>
+                            <form action="{{ url_for('person_loeschen', person_id=person.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('Person und alle Hunde wirklich löschen?');">
+                                <button type="submit" class="btn btn-danger btn-sm">🗑️</button>
+                            </form>
+							
+							<form action="{{ url_for('person_toggle_aktiv', person_id=person.id) }}" method="POST" style="display:inline;">
+								{% if person.aktiv %}
+									<button type="submit" class="btn btn-warning btn-sm">⏸️</button>
+								{% else %}
+									<button type="submit" class="btn btn-success btn-sm">▶️</button>
+								{% endif %}
+							</form>
+
+                        </div>
+                    </td>
+                </tr>
+				<tr class="person-header {% if not person.aktiv %}inactive{% endif %}">
+                {% if person.hunde %}
+                    {% for hund in person.hunde %}
+                    <tr>
+                        <td></td>
+                        <td><strong>{{ hund.name }}</strong></td>
+                        <td>{{ hund.geburtstag|format_datum }}</td>
+                        <td><span class="status-cell status-{{ get_status(hund.gueltig_shp_dap_dhp) }}">{{ hund.gueltig_shp_dap_dhp|format_datum }}</span></td>
+                        <td><span class="status-cell status-{{ get_status(hund.gueltig_l) }}">{{ hund.gueltig_l|format_datum }}</span></td>
+                        <td><span class="status-cell status-{{ get_status(hund.gueltig_bbpi) }}">{{ hund.gueltig_bbpi|format_datum }}</span></td>
+                        <td><span class="status-cell status-{{ get_status(hund.gueltig_t) }}">{{ hund.gueltig_t|format_datum }}</span></td>
+                        <td>
+                            {% if hund.haftpflicht_gueltig %}
+                                <span class="badge badge-success">Ja</span>
+                            {% else %}
+                                <span class="badge badge-danger">Nein</span>
+                            {% endif %}
+                        </td>
+                        <td class="bemerkung-cell" title="{{ hund.bemerkung or '' }}">{{ hund.bemerkung or '-' }}</td>
+                        <td>
+                            <div class="person-actions">
+                                <a href="{{ url_for('hund_bearbeiten', hund_id=hund.id) }}" class="btn btn-secondary btn-sm">✏️</a>
+                                <form action="{{ url_for('hund_loeschen', hund_id=hund.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('Hund wirklich löschen?');">
+                                    <button type="submit" class="btn btn-danger btn-sm">🗑️</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td></td>
+                        <td colspan="9" style="color: #6c757d; font-style: italic;">Noch keine Hunde angelegt</td>
+                    </tr>
+                {% endif %}
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="table-container">
+    <div class="empty-state">
+        <h3>Noch keine Einträge vorhanden</h3>
+        <p>Legen Sie eine neue Person an, um zu beginnen.</p>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

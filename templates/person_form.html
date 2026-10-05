@@ -1,0 +1,30 @@
+<!-- templates/person_form.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="form-container">
+    <h2>{{ 'Person bearbeiten' if person else 'Neue Person anlegen' }}</h2>
+    
+    <form method="POST">
+        <div class="form-group">
+            <label for="vorname" class="required">Vorname</label>
+            <input type="text" id="vorname" name="vorname" value="{{ person.vorname if person else '' }}" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="nachname" class="required">Nachname</label>
+            <input type="text" id="nachname" name="nachname" value="{{ person.nachname if person else '' }}" required>
+        </div>
+        
+		<div class="form-group">
+			<label><input type="checkbox" name="fotofreigabe" value="1">Fotofreigabe</label>
+        </div>
+		
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">{{ 'Speichern' if person else 'Anlegen' }}</button>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">Abbrechen</a>
+        </div>
+		
+    </form>
+</div>
+{% endblock %}
