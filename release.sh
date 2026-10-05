@@ -31,5 +31,7 @@ git add VERSION
 git diff --cached --quiet || git commit -m "Version $VERSION"
 git tag "v$VERSION"
 git push origin main "v$VERSION"
-gh release create "v$VERSION" --title "Version $VERSION" --notes "$NOTIZEN"
+# REST statt "gh release create" - das nutzt GraphQL und läuft öfter ins Rate-Limit
+gh api repos/kai-osthoff/hundemanager/releases \
+    -f tag_name="v$VERSION" -f name="Version $VERSION" -f body="$NOTIZEN" --jq .html_url
 echo "Release v$VERSION veröffentlicht."
