@@ -489,7 +489,7 @@
         .kennzahlen {
             list-style: none;
             display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
+            grid-template-columns: repeat(5, minmax(0, 1fr));
             gap: 12px;
         }
         .kennzahl {
@@ -578,6 +578,8 @@
             color: #173B2C;
         }
         .etikett-grau { background: #E4E8E5; color: #4A514D; }
+        .etikett-warn { background: #FFF1D6; color: #5C3800; }
+        .etikett-alarm { background: #FBE3E1; color: #7A1A13; }
 
         .hunde-grid {
             display: grid;
@@ -725,6 +727,21 @@
             font-size: 0.85rem;
             text-decoration: underline;
         }
+
+        /* Einstellungsdialog (natives <dialog>, kein JavaScript-Framework) */
+        .einstellungen-dialog {
+            margin: auto;
+            width: min(640px, calc(100% - 32px));
+            border: 0;
+            border-radius: 20px;
+            padding: 28px;
+            color: #15201A;
+            box-shadow: 0 20px 60px rgba(15, 42, 31, 0.35);
+        }
+        .einstellungen-dialog::backdrop { background: rgba(21, 32, 26, 0.55); }
+        .einstellungen-dialog h2 { margin-bottom: 18px; }
+        .einstellungen-dialog input[type=url] { width: 100%; }
+        .dialog-aktionen { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; margin-top: 20px; }
     </style>
 </head>
 <body>
@@ -734,6 +751,11 @@
                 <h1><a href="{{ url_for('index') }}">Hundemanager</a></h1>
                 <div class="kopf-rechts">
                     {% block kopf_aktionen %}{% endblock %}
+                    <a href="{{ url_for('einstellungen') }}" class="btn-rund btn-umriss" title="Einstellungen"
+                       onclick="var d = document.getElementById('einstellungen-dialog'); if (d && d.showModal) { d.showModal(); return false; }">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+                        Einstellungen
+                    </a>
                     <div id="update-bereich">{% include '_update_kopf.html' %}</div>
                 </div>
             </div>
@@ -782,10 +804,20 @@
         {% block content %}{% endblock %}
     </div>
 
+    {% if request.endpoint != 'einstellungen' %}
+    <dialog id="einstellungen-dialog" class="einstellungen-dialog" aria-labelledby="einstellungen-titel">
+        <h2 id="einstellungen-titel">Einstellungen</h2>
+        {% with werte = einstellungen_werte, zurueck = request.full_path.rstrip('?') %}
+            {% include '_einstellungen_formular.html' %}
+        {% endwith %}
+    </dialog>
+    {% endif %}
+
     <footer>
         <span>Version {{ app_version }}</span>
         <a href="{{ url_for('nachweise_uebersicht') }}" class="link-button">Nachweise</a>
         <a href="{{ url_for('sicherungen') }}" class="link-button">Sicherungen</a>
+        <a href="{{ url_for('einstellungen') }}" class="link-button">Einstellungen</a>
     </footer>
     <script>
         // Neue Version auch ohne Neuladen anzeigen: jede Minute den Update-Knopf nachfragen.

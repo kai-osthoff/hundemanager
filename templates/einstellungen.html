@@ -1,0 +1,11 @@
+<!-- templates/einstellungen.html - Einstellungen als eigene Seite (Rückfall ohne Dialog, Fehlermeldungen) -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="form-container" style="max-width: 680px;">
+    <h2>Einstellungen</h2>
+    {% with zurueck = '' %}
+        {% include '_einstellungen_formular.html' %}
+    {% endwith %}
+</div>
+{% endblock %}

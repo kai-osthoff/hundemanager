@@ -30,8 +30,17 @@
             <input type="email" id="email" name="email" value="{{ w.email or '' }}" maxlength="200" autocomplete="off">
         </div>
 
-		<div class="form-group">
-			<label><input type="checkbox" name="fotofreigabe" value="1" {{ 'checked' if w.fotofreigabe }}> Fotofreigabe</label>
+        <div class="form-group">
+            {% set einwilligung = person.aktuelle_fotoeinwilligung if person else None %}
+            {% if einwilligung %}
+                <label><input type="checkbox" checked disabled> Fotofreigabe</label>
+                <small>Unterschriebene Einwilligung liegt vor{% if einwilligung.unterschrieben_am %} (vom {{ einwilligung.unterschrieben_am|format_datum }}){% endif %}.
+                    <a href="{{ url_for('fotoeinwilligung', person_id=person.id) }}">Einwilligung ansehen oder Widerruf vermerken</a></small>
+            {% else %}
+                <label><input type="checkbox" name="fotofreigabe" value="1" {{ 'checked' if w.fotofreigabe }}> Fotofreigabe</label>
+                <small>Nur ankreuzen, wenn die Freigabe ohne Dokument vorliegt.
+                    {% if person %}Besser: <a href="{{ url_for('fotoeinwilligung', person_id=person.id) }}">unterschriebene Einwilligung hochladen</a>.{% else %}Die unterschriebene Einwilligung kann nach dem Anlegen hochgeladen werden.{% endif %}</small>
+            {% endif %}
         </div>
 
         <div class="form-actions">

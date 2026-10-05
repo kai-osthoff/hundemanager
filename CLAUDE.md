@@ -137,6 +137,22 @@ Programm passiert erst nach einer geprüften Sicherung.**
 - Hundekarten mit fehlenden/abgelaufenen/bald fälligen Angaben bekommen eine vorausgefüllte
   Nachfrage (`fehlende_angaben()` in app.py). Datenschutz: echte Nummern nie in Tests.
 
+## Fotoeinwilligung (je Halter) und Einstellungen
+
+- Die Einwilligung zu Fotoaufnahmen gilt für die **Person**, nicht für einen Hund – deshalb
+  eigene Tabelle `fotoeinwilligung` (nicht `Nachweis`, das hängt am Hund). Die Datei liegt
+  trotzdem über `nachweise.speichern()` in derselben unveränderlichen Ablage und wird so
+  automatisch mitgesichert.
+- `Person.foto_status`: `nachgewiesen` (Dokument da), `ohne-nachweis` (nur Häkchen
+  `fotofreigabe`, Altbestand), `widerrufen`, `fehlt`. Bei `fehlt`/`ohne-nachweis` gibt es eine
+  WhatsApp-Anfrage mit Link zum Formular. Nach einem Widerruf wird **nicht** erneut gefragt.
+- Widerruf wird nur vermerkt (`widerrufen_am`), Eintrag und Datei bleiben als Nachweis.
+  `fotofreigabe` wird beim Hochladen/Widerruf mitgeführt (Excel und Altcode lesen es).
+- Einstellungen: Tabelle `einstellung` (Schlüssel/Wert), bekannte Einträge mit Standard in
+  `EINSTELLUNGEN` (app.py). Leerer/Standardwert wird nicht gespeichert. Bearbeitet wird im
+  Einstellungsdialog (`<dialog>` im Kopf jeder Seite), `/einstellungen` ist die Rückfallseite.
+  Der Formular-Link (`fotoeinwilligung_link`) muss mit http(s):// beginnen.
+
 ## Releases
 
 - **Versionen: nur 5.1.x, nur die letzte Stelle hochzählen** (5.1.1, 5.1.2, …).

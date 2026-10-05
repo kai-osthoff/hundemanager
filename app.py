@@ -41,11 +41,37 @@ class Person(db.Model):
     mobil = db.Column(db.String(30), nullable=True)   # für WhatsApp, so wie eingegeben
     email = db.Column(db.String(200), nullable=True)
     hunde = db.relationship('Hund', backref='besitzer', lazy=True, cascade='all, delete-orphan')
+    fotoeinwilligungen = db.relationship('Fotoeinwilligung', backref='person', lazy=True,
+                                         cascade='all, delete-orphan',
+                                         order_by='Fotoeinwilligung.hochgeladen_am.desc()')
 
 
     @property
     def vollstaendiger_name(self):
         return f"{self.vorname} {self.nachname}"
+
+    @property
+    def aktuelle_fotoeinwilligung(self):
+        """Die neueste nicht widerrufene Einwilligung mit Dokument - oder None."""
+        return next((e for e in self.fotoeinwilligungen if not e.widerrufen_am), None)
+
+    @property
+    def foto_status(self):
+        """'nachgewiesen', 'ohne-nachweis' (nur angekreuzt), 'widerrufen' oder 'fehlt'."""
+        if self.aktuelle_fotoeinwilligung:
+            return 'nachgewiesen'
+        if self.fotoeinwilligungen:
+            return 'widerrufen'  # nach einem Widerruf nicht erneut nachfragen
+        return 'ohne-nachweis' if self.fotofreigabe else 'fehlt'
+
+    @property
+    def fotoeinwilligung_anfrage(self):
+        """WhatsApp-Nachricht mit Link zum Formular - None, wenn nichts zu fragen ist oder die Nummer fehlt."""
+        if self.foto_status not in ('fehlt', 'ohne-nachweis'):
+            return None
+        return whatsapp.link(self.mobil, whatsapp.fotoeinwilligung_nachricht(
+            self.vorname, [h.name for h in sorted(self.hunde, key=lambda h: h.name.lower())],
+            einstellung('fotoeinwilligung_link')))
 
     @property
     def whatsapp_link(self):
@@ -134,6 +160,46 @@ class Nachweis(db.Model):
     @property
     def erinnern_ab(self):
         return self.gueltig_bis - ERINNERUNG_VORLAUF if self.gueltig_bis else None
+
+
+class Fotoeinwilligung(db.Model):
+    """Unterschriebene Einwilligung zu Fotoaufnahmen - gilt für den Halter, nicht für einen Hund.
+    Die Datei liegt wie alle Nachweise unveränderlich in instance/nachweise/."""
+    id = db.Column(db.Integer, primary_key=True)
+    person_id = db.Column(db.Integer, db.ForeignKey('person.id'), nullable=False)
+    datei_sha256 = db.Column(db.String(64), nullable=False)
+    datei_endung = db.Column(db.String(4), nullable=False)
+    original_name = db.Column(db.String(255), nullable=True)
+    hochgeladen_am = db.Column(db.DateTime, nullable=False, default=datetime.now)
+    unterschrieben_am = db.Column(db.Date, nullable=True)
+    widerrufen_am = db.Column(db.Date, nullable=True)   # Widerruf wird vermerkt, nie gelöscht
+    bemerkung = db.Column(db.Text, nullable=True)
+
+
+class Einstellung(db.Model):
+    """Einstellungen, die Saskia selbst ändern kann (Einstellungsdialog oben rechts)."""
+    schluessel = db.Column(db.String(50), primary_key=True)
+    wert = db.Column(db.Text, nullable=True)
+
+
+# Bekannte Einstellungen mit Standardwert - neue Einstellung = Eintrag hier
+EINSTELLUNGEN = {
+    'fotoeinwilligung_link': {
+        'name': 'Link zum Formular „Einwilligung zu Fotoaufnahmen“',
+        'hilfe': 'Wird in der WhatsApp-Anfrage mitgeschickt. Ändert der Verein das Formular, '
+                 'hier den neuen Link eintragen.',
+        'standard': 'https://www.hsv-grossbottwar.de/wp-content/uploads/2026/02/Einwilligung_Fotoaufnahmen_wolf.pdf',
+        'art': 'url',
+    },
+}
+
+
+def einstellung(schluessel):
+    """Gespeicherter Wert oder - wenn nie geändert - der Standard."""
+    eintrag = db.session.get(Einstellung, schluessel)
+    if eintrag and eintrag.wert:
+        return eintrag.wert
+    return EINSTELLUNGEN[schluessel]['standard']
 
 
 def get_status(datum):
@@ -288,6 +354,7 @@ def index():
         'abgelaufen': impf_stati.count('abgelaufen'),
         'ohne_haftpflicht': sum(1 for h in aktive_hunde if h['haftpflicht'] not in ('gueltig', 'bald-ablaufend')),
         'handlungsbedarf': sum(1 for h in aktive_hunde if h['gesamt'] != 'ok'),
+        'ohne_fotoeinwilligung': sum(1 for p in aktive if p.foto_status in ('fehlt', 'ohne-nachweis')),
     }
 
     return render_template('index.html', gruppen=gruppen, ansicht=ansicht,
@@ -309,7 +376,9 @@ def _person_angaben(person):
         return 'Die E-Mail-Adresse stimmt so nicht – bitte prüfen.'
     person.vorname = vorname
     person.nachname = nachname
-    person.fotofreigabe = request.form.get('fotofreigabe') == '1'
+    # Mit unterschriebener Einwilligung bleibt die Freigabe bestehen (Häkchen ist dann gesperrt)
+    person.fotofreigabe = request.form.get('fotofreigabe') == '1' or bool(
+        person.id and person.aktuelle_fotoeinwilligung)
     person.mobil = mobil or None
     person.email = email or None
     return None
@@ -610,6 +679,95 @@ def nachweise_uebersicht():
                            arten=NACHWEIS_ARTEN, heute=heute, vorlauf_wochen=6)
 
 
+# --- Fotoeinwilligung (je Halter) ---
+
+@app.route('/person/<int:person_id>/fotoeinwilligung')
+def fotoeinwilligung(person_id):
+    person = Person.query.get_or_404(person_id)
+    return render_template('fotoeinwilligung.html', person=person,
+                           formular_link=einstellung('fotoeinwilligung_link'), heute=date.today())
+
+
+@app.route('/person/<int:person_id>/fotoeinwilligung/hochladen', methods=['POST'])
+def fotoeinwilligung_hochladen(person_id):
+    person = Person.query.get_or_404(person_id)
+    datei = request.files.get('datei')
+    if not datei or not datei.filename:
+        flash('Bitte die unterschriebene Einwilligung (PDF oder Foto) auswählen.', 'error')
+        return redirect(url_for('fotoeinwilligung', person_id=person.id))
+    unterschrieben_am = parse_datum(request.form.get('unterschrieben_am'))
+    if unterschrieben_am and unterschrieben_am > date.today():
+        flash('Das Datum der Unterschrift liegt in der Zukunft – bitte prüfen.', 'error')
+        return redirect(url_for('fotoeinwilligung', person_id=person.id))
+    try:
+        sha256, endung = nachweise.speichern(datei.read())
+    except nachweise.NachweisFehler as e:
+        flash(str(e), 'error')
+        return redirect(url_for('fotoeinwilligung', person_id=person.id))
+
+    db.session.add(Fotoeinwilligung(
+        person_id=person.id, datei_sha256=sha256, datei_endung=endung,
+        original_name=os.path.basename(datei.filename)[:255], unterschrieben_am=unterschrieben_am,
+        bemerkung=request.form.get('bemerkung', '').strip() or None))
+    person.fotofreigabe = True
+    db.session.commit()
+    flash(f'Fotoeinwilligung von {person.vollstaendiger_name} gespeichert.', 'success')
+    return redirect(url_for('fotoeinwilligung', person_id=person.id))
+
+
+@app.route('/fotoeinwilligung/<int:einwilligung_id>/widerrufen', methods=['POST'])
+def fotoeinwilligung_widerrufen(einwilligung_id):
+    """Widerruf vermerken - Dokument und Eintrag bleiben als Nachweis erhalten."""
+    einwilligung = Fotoeinwilligung.query.get_or_404(einwilligung_id)
+    person = einwilligung.person
+    einwilligung.widerrufen_am = parse_datum(request.form.get('widerrufen_am')) or date.today()
+    person.fotofreigabe = person.aktuelle_fotoeinwilligung is not None
+    db.session.commit()
+    flash(f'Widerruf vom {format_datum(einwilligung.widerrufen_am)} vermerkt – '
+          f'Fotos von {person.vollstaendiger_name} nicht mehr verwenden.', 'success')
+    return redirect(url_for('fotoeinwilligung', person_id=person.id))
+
+
+@app.route('/fotoeinwilligung/<int:einwilligung_id>/datei')
+def fotoeinwilligung_datei(einwilligung_id):
+    einwilligung = Fotoeinwilligung.query.get_or_404(einwilligung_id)
+    return _sende_nachweis(einwilligung.datei_sha256, einwilligung.datei_endung, einwilligung.original_name)
+
+
+# --- Einstellungen ---
+
+def _einstellung_pruefen(schluessel, wert):
+    """Fehlermeldung oder None."""
+    if EINSTELLUNGEN[schluessel]['art'] == 'url' and wert and \
+            not re.fullmatch(r'https?://[^\s/]+\.[^\s/]+(/\S*)?', wert):
+        return f'{EINSTELLUNGEN[schluessel]["name"]}: bitte eine vollständige Adresse ' \
+               f'eingeben, die mit https:// beginnt.'
+    return None
+
+
+@app.route('/einstellungen', methods=['GET', 'POST'])
+def einstellungen():
+    if request.method == 'POST':
+        werte = {s: request.form.get(s, '').strip() for s in EINSTELLUNGEN}
+        if request.form.get('standard'):
+            werte = {s: '' for s in EINSTELLUNGEN}  # leer = Standard
+        fehler = [f for f in (_einstellung_pruefen(s, w) for s, w in werte.items()) if f]
+        if fehler:
+            for f in fehler:
+                flash(f, 'error')
+            return render_template('einstellungen.html', werte=werte)
+        for schluessel, wert in werte.items():
+            eintrag = db.session.get(Einstellung, schluessel) or Einstellung(schluessel=schluessel)
+            eintrag.wert = None if wert == EINSTELLUNGEN[schluessel]['standard'] else (wert or None)
+            db.session.add(eintrag)
+        db.session.commit()
+        flash('Einstellungen gespeichert.', 'success')
+        ziel = request.form.get('zurueck', '')
+        # Nur Seiten dieser App als Rücksprung
+        return redirect(ziel if ziel.startswith('/') and not ziel.startswith('//') else url_for('einstellungen'))
+    return render_template('einstellungen.html', werte={s: einstellung(s) for s in EINSTELLUNGEN})
+
+
 def parse_datum(datum_string):
     """Parst einen Datum-String in ein date-Objekt"""
     if not datum_string:
@@ -663,13 +821,13 @@ def export_excel():
             ws.cell(row=row, column=2, value=person.vorname).border = thin_border
             
             """ws.cell(row=row, column=3, value=person.fotofreigabe).border = thin_border"""
-            foto_cell = ws.cell(row=row, column=3, value='Ja' if person.fotofreigabe else 'Nein')
+            foto_status = person.foto_status
+            foto_cell = ws.cell(row=row, column=3, value={
+                'nachgewiesen': 'Ja', 'ohne-nachweis': 'Ja (ohne Nachweis)',
+                'widerrufen': 'Widerrufen'}.get(foto_status, 'Nein'))
             foto_cell.border = thin_border
             foto_cell.alignment = Alignment(horizontal='center')
-            if person.fotofreigabe:
-                foto_cell.fill = green_fill
-            else:
-                foto_cell.fill = red_fill
+            foto_cell.fill = {'nachgewiesen': green_fill, 'ohne-nachweis': orange_fill}.get(foto_status, red_fill)
                 
                 
             status = impfstatus_farbe(hund)
@@ -717,7 +875,7 @@ def export_excel():
             row += 1
     
     # Spaltenbreiten anpassen
-    column_widths = [15, 15, 7, 20, 12, 15, 12, 12, 12, 18, 30, 18, 28]
+    column_widths = [15, 15, 18, 20, 12, 15, 12, 12, 12, 18, 30, 18, 28]
     for i, width in enumerate(column_widths, 1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = width
     
@@ -811,6 +969,13 @@ def update_kontext():
         # Alter Starter (v5.1.0) läuft noch - erst nach Neustart über START.bat ist die Absicherung aktiv
         'starter_veraltet': LAUNCHER_PROTOKOLL == 1,
     }
+
+
+@app.context_processor
+def einstellungen_kontext():
+    # Für den Einstellungsdialog im Kopf jeder Seite
+    return {'einstellungen_info': EINSTELLUNGEN,
+            'einstellungen_werte': {s: einstellung(s) for s in EINSTELLUNGEN}}
 
 
 @app.route('/update/pruefen', methods=['POST'])
@@ -995,7 +1160,8 @@ def _haftpflicht_nachweise_uebernehmen(schon_gesichert):
 def selbsttest():
     """Lädt die wichtigsten Seiten einmal intern - fällt etwas um, gilt das Update als fehlgeschlagen."""
     with app.test_client() as client:
-        for pfad in ('/', '/?ansicht=handlungsbedarf', '/?ansicht=alle', '/nachweise', '/sicherungen', '/export/excel'):
+        for pfad in ('/', '/?ansicht=handlungsbedarf', '/?ansicht=alle', '/nachweise', '/sicherungen', '/einstellungen',
+                     '/export/excel'):
             antwort = client.get(pfad)
             if antwort.status_code != 200:
                 raise RuntimeError(f'Selbsttest: {pfad} liefert {antwort.status_code}')

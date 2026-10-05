@@ -1,0 +1,102 @@
+<!-- templates/fotoeinwilligung.html - Einwilligung zu Fotoaufnahmen eines Halters: Status, Anfrage, Nachweis, Widerruf -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="leiste">
+    <a href="{{ url_for('index') }}" class="knopf">← Zur Übersicht</a>
+    <a href="{{ url_for('person_bearbeiten', person_id=person.id) }}" class="knopf">Person bearbeiten</a>
+</div>
+
+<div class="form-container" style="max-width: 1180px;">
+    <h2>Fotoeinwilligung – {{ person.vollstaendiger_name }}</h2>
+    {% if person.hunde %}<p style="color: #55625A; margin-bottom: 16px;">Hunde: {{ person.hunde|map(attribute='name')|join(', ') }}</p>{% endif %}
+
+    {% set aktuell = person.aktuelle_fotoeinwilligung %}
+    {% set foto = person.foto_status %}
+    <p style="margin-bottom: 16px;">
+    {% if foto == 'nachgewiesen' %}
+        <span class="badge badge-success">Einwilligung liegt vor</span>
+        {% if aktuell.unterschrieben_am %} – unterschrieben am {{ aktuell.unterschrieben_am|format_datum }}{% endif %}
+        · <a href="{{ url_for('fotoeinwilligung_datei', einwilligung_id=aktuell.id) }}" target="_blank">Dokument ansehen</a>
+    {% elif foto == 'ohne-nachweis' %}
+        <span class="badge badge-success">Ja</span> – bisher nur angekreuzt, <strong>noch keine unterschriebene Einwilligung hinterlegt</strong>.
+    {% elif foto == 'widerrufen' %}
+        <span class="badge badge-danger">Widerrufen</span> – Fotos und Videos von {{ person.vorname }} nicht mehr verwenden.
+    {% else %}
+        <span class="badge badge-danger">Keine Einwilligung</span> – Fotos und Videos von {{ person.vorname }} vorerst nicht veröffentlichen.
+    {% endif %}
+    </p>
+
+    {% if foto in ('fehlt', 'ohne-nachweis') %}
+    <div class="halter-aktionen" style="margin-bottom: 8px;">
+        {% if person.fotoeinwilligung_anfrage %}
+        <a href="{{ person.fotoeinwilligung_anfrage }}" target="whatsapp" rel="noopener" class="knopf knopf-whatsapp">Per WhatsApp anfragen (mit Link zum Formular)</a>
+        {% else %}
+        <a href="{{ url_for('person_bearbeiten', person_id=person.id) }}" class="knopf">Für eine WhatsApp-Anfrage Handynummer eintragen</a>
+        {% endif %}
+        <a href="{{ formular_link }}" target="_blank" rel="noopener" class="knopf">Leeres Formular öffnen ↗</a>
+    </div>
+    <p style="color: #55625A; font-size: 0.85rem;">Der Link zum Formular lässt sich oben unter „Einstellungen“ ändern.</p>
+    {% endif %}
+
+    <h3 style="margin-top: 22px;">Unterschriebene Einwilligung hochladen</h3>
+    <p style="color: #55625A; font-size: 0.9rem; margin-bottom: 10px;">PDF/Scan oder Foto (JPG/PNG) des ausgefüllten und unterschriebenen Formulars.</p>
+    <form action="{{ url_for('fotoeinwilligung_hochladen', person_id=person.id) }}" method="POST" enctype="multipart/form-data">
+        <div class="form-group">
+            <label for="datei" class="required">Datei</label>
+            <input type="file" id="datei" name="datei" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required>
+        </div>
+        <div class="form-group">
+            <label for="unterschrieben_am">Unterschrieben am</label>
+            <input type="date" id="unterschrieben_am" name="unterschrieben_am" max="{{ heute|iso_datum }}">
+        </div>
+        <div class="form-group">
+            <label for="bemerkung">Bemerkung</label>
+            <input type="text" id="bemerkung" name="bemerkung" placeholder="z. B. minderjährig – Unterschrift der Eltern auf Seite 2">
+        </div>
+        <button type="submit" class="btn btn-primary">Hochladen</button>
+    </form>
+</div>
+
+<div class="table-container" style="max-width: 1180px; margin: 24px auto;">
+    <table>
+        <thead>
+            <tr>
+                <th>Status</th>
+                <th>Unterschrieben</th>
+                <th>Dokument</th>
+                <th>Bemerkung</th>
+                <th>Hochgeladen</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for e in person.fotoeinwilligungen %}
+            <tr>
+                <td>{% if e.widerrufen_am %}<span class="badge badge-danger">widerrufen am {{ e.widerrufen_am|format_datum }}</span>{% else %}<span class="badge badge-success">gültig</span>{% endif %}</td>
+                <td>{{ e.unterschrieben_am|format_datum }}</td>
+                <td>{{ e.original_name or '-' }}</td>
+                <td>{{ e.bemerkung or '' }}</td>
+                <td>{{ e.hochgeladen_am.strftime('%d.%m.%Y %H:%M') }}</td>
+                <td>
+                    <div class="person-actions">
+                        <a href="{{ url_for('fotoeinwilligung_datei', einwilligung_id=e.id) }}" target="_blank" class="knopf">Ansehen</a>
+                        {% if not e.widerrufen_am %}
+                        <form action="{{ url_for('fotoeinwilligung_widerrufen', einwilligung_id=e.id) }}" method="POST"
+                              onsubmit="return confirm('Widerruf der Fotoeinwilligung von {{ person.vollstaendiger_name }} vermerken?\n\nDas Dokument bleibt als Nachweis gespeichert.');">
+                            <button type="submit" class="knopf knopf-gefahr">Widerruf vermerken</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" style="color: #55625A; font-style: italic;">Noch keine unterschriebene Einwilligung hinterlegt</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<p style="text-align: center; color: #55625A; font-size: 0.85rem;">
+    Einwilligungen bleiben dauerhaft gespeichert und werden mitgesichert – auch nach einem Widerruf.
+</p>
+{% endblock %}

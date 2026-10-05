@@ -951,6 +951,15 @@ class WhatsAppTests(unittest.TestCase):
         self.assertEqual(urllib.parse.parse_qs(abfrage)['text'], ['Hallo Zoë,\nImpfung SHP/DAP/DHP & L: 50 %?'])
         self.assertEqual(urllib.parse.parse_qs(abfrage)['phone'], ['491711234567'])
 
+    def test_fotoeinwilligung_nachricht_mit_link(self):
+        link = 'https://example.org/formular.pdf'
+        text = self.wa.fotoeinwilligung_nachricht('Zoë', ['Bello', 'Luna', 'Rex'], link)
+        self.assertTrue(text.startswith('Hallo Zoë,'))
+        self.assertIn('mit Bello, Luna und Rex', text)
+        self.assertIn('\n' + link + '\n', text)  # eigene Zeile, damit WhatsApp ihn als Link erkennt
+        self.assertIn('mit Fiete ', self.wa.fotoeinwilligung_nachricht('A', ['Fiete'], link))
+        self.assertNotIn(' mit ', self.wa.fotoeinwilligung_nachricht('A', [], link).split('\n')[2])
+
     def test_nachricht_nennt_alle_punkte(self):
         text = self.wa.fehlende_daten_nachricht('Jürgen', 'Bello', ['Impfung L: Datum fehlt noch', 'Geburtstag'])
         self.assertTrue(text.startswith('Hallo Jürgen,'))
@@ -1011,7 +1020,7 @@ class WhatsAppOberflaecheTests(unittest.TestCase):
         texte = {}
         for l in links:
             abfrage = urllib.parse.parse_qs(urllib.parse.urlparse(l).query)
-            if 'text' in abfrage:
+            if 'text' in abfrage and 'Einwilligung' not in abfrage['text'][0]:
                 texte[re.search(r'für (\w+)', abfrage['text'][0]).group(1)] = abfrage['text'][0]
         self.assertEqual(set(texte), {'Bello', 'Luna'})  # Rex/Fiete: Halter ohne Nummer
         self.assertIn('Hallo Jürgen,', texte['Luna'])
@@ -1022,6 +1031,124 @@ class WhatsAppOberflaecheTests(unittest.TestCase):
         self.assertNotIn('Geburtstag', texte['Bello'])
         self.assertIn('• Impfung L: Datum fehlt noch', texte['Bello'])
         self.assertIn('target="whatsapp"', seite)
+
+
+class FotoeinwilligungTests(unittest.TestCase):
+    """Fotoeinwilligung je Halter: Anfrage per WhatsApp mit Formular-Link, Nachweis, Widerruf."""
+
+    setUp = HaftpflichtOberflaecheTests.setUp
+    tearDown = HaftpflichtOberflaecheTests.tearDown
+    oeffne = HaftpflichtOberflaecheTests.oeffne
+    STANDARD_LINK = 'https://www.hsv-grossbottwar.de/wp-content/uploads/2026/02/Einwilligung_Fotoaufnahmen_wolf.pdf'
+
+    def anfragen(self):
+        """Texte der Fotoeinwilligungs-Anfragen in der Übersicht."""
+        seite = self.oeffne('/').decode('utf-8')
+        texte = []
+        for l in re.findall(r'href="(https://web\.whatsapp\.com/[^"]+)"', seite):
+            abfrage = urllib.parse.parse_qs(urllib.parse.urlparse(html_unescape(l)).query)
+            if 'Einwilligung' in abfrage.get('text', [''])[0]:
+                texte.append(abfrage['text'][0])
+        return texte
+
+    def einstellen(self, **werte):
+        return self.oeffne('/einstellungen', urllib.parse.urlencode(werte).encode()).decode('utf-8')
+
+    def hochladen(self, person_id, daten, dateiname, **felder):
+        koerper, typ = multipart('datei', dateiname, daten)
+        grenze = typ.split('boundary=')[1]
+        for name, wert in felder.items():
+            koerper = (f'--{grenze}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{wert}\r\n').encode() + koerper
+        return self.oeffne(f'/person/{person_id}/fotoeinwilligung/hochladen', koerper, typ).decode('utf-8')
+
+    def excel_foto(self):
+        import openpyxl
+        mappe = openpyxl.load_workbook(io.BytesIO(self.oeffne('/export/excel')))
+        return {z[1]: z[2] for z in mappe.active.iter_rows(min_row=2, values_only=True)}
+
+    def test_anfrage_nachweis_und_widerruf(self):
+        # Ohne Einwilligung: Etikett, Kennzahl und - mit Handynummer - die Anfrage mit Formular-Link
+        seite = self.oeffne('/').decode('utf-8')
+        self.assertIn('Keine Fotoeinwilligung', seite)
+        self.assertIn('<strong>3</strong>Halter ohne unterschriebene Fotoeinwilligung', seite)
+        self.assertEqual(self.anfragen(), [])  # noch keine Handynummern
+        self.oeffne('/person/1/bearbeiten', urllib.parse.urlencode(
+            {'vorname': 'Jürgen', 'nachname': 'Müller', 'mobil': '0171 1234567'}).encode())
+        [text] = self.anfragen()
+        self.assertIn('Hallo Jürgen,', text)
+        self.assertIn('mit Bello und Luna', text)
+        self.assertIn(self.STANDARD_LINK, text)
+        self.assertEqual(self.excel_foto()['Jürgen'], 'Nein')
+
+        # Unterschriebene Einwilligung als Foto hochladen
+        foto = b'\xff\xd8\xff\xe0' + b'Einwilligung-Test' * 40
+        seite = self.hochladen(1, foto, 'Einwilligung Müller.jpg', unterschrieben_am='2026-02-14',
+                               bemerkung='Test')
+        self.assertIn('Fotoeinwilligung von Jürgen Müller gespeichert', seite)
+        self.assertIn('unterschrieben am 14.02.2026', seite)
+        self.assertEqual(self.oeffne('/fotoeinwilligung/1/datei'), foto)
+        self.assertEqual(self.anfragen(), [])  # nichts mehr zu fragen
+        self.assertIn('Fotoeinwilligung ✓', self.oeffne('/').decode('utf-8'))
+        self.assertEqual(self.excel_foto()['Jürgen'], 'Ja')
+        # Datei liegt in der gemeinsamen, gesicherten Nachweis-Ablage
+        sha = __import__('hashlib').sha256(foto).hexdigest()
+        self.assertTrue(os.path.exists(os.path.join(self.app_dir, 'instance', 'nachweise', sha + '.jpg')))
+
+        # Person speichern ohne Häkchen nimmt die belegte Freigabe nicht weg
+        seite = self.oeffne('/person/1/bearbeiten', urllib.parse.urlencode(
+            {'vorname': 'Jürgen', 'nachname': 'Müller', 'mobil': '0171 1234567'}).encode()).decode('utf-8')
+        self.assertIn('Person wurde aktualisiert', seite)
+        with closing(sqlite3.connect(self.db)) as v:
+            self.assertEqual(v.execute('SELECT fotofreigabe FROM person WHERE id = 1').fetchone(), (1,))
+
+        # Widerruf: vermerkt, Dokument bleibt, keine erneute Anfrage
+        seite = self.oeffne('/fotoeinwilligung/1/widerrufen', urllib.parse.urlencode(
+            {'widerrufen_am': '2026-09-01'}).encode()).decode('utf-8')
+        self.assertIn('Widerruf vom 01.09.2026 vermerkt', seite)
+        self.assertEqual(self.oeffne('/fotoeinwilligung/1/datei'), foto)
+        self.assertIn('Fotoeinwilligung widerrufen', self.oeffne('/').decode('utf-8'))
+        self.assertEqual(self.anfragen(), [])
+        self.assertEqual(self.excel_foto()['Jürgen'], 'Widerrufen')
+        with closing(sqlite3.connect(self.db)) as v:
+            self.assertEqual(v.execute('SELECT fotofreigabe FROM person WHERE id = 1').fetchone(), (0,))
+
+    def test_falsche_datei_und_datum_in_der_zukunft(self):
+        seite = self.hochladen(2, b'MZ\x90\x00', 'virus.exe')
+        self.assertIn('Bitte ein PDF oder ein Foto', seite)
+        morgen = (date.today() + timedelta(days=1)).isoformat()
+        seite = self.hochladen(2, test_pdf(['Einwilligung']), 'e.pdf', unterschrieben_am=morgen)
+        self.assertIn('liegt in der Zukunft', seite)
+        with closing(sqlite3.connect(self.db)) as v:
+            self.assertEqual(v.execute('SELECT COUNT(*) FROM fotoeinwilligung').fetchone(), (0,))
+
+    def test_formular_link_im_einstellungsdialog(self):
+        self.oeffne('/person/2/bearbeiten', urllib.parse.urlencode(
+            {'vorname': 'Saskia', 'nachname': 'Test', 'mobil': '0171 7654321'}).encode())
+        seite = self.oeffne('/').decode('utf-8')
+        self.assertIn('id="einstellungen-dialog"', seite)  # Dialog auf jeder Seite
+        self.assertIn(f'value="{self.STANDARD_LINK}"', seite)
+
+        # Unsinn wird abgelehnt, nichts gespeichert
+        seite = self.einstellen(fotoeinwilligung_link='kein link')
+        self.assertIn('bitte eine vollständige Adresse', seite)
+        self.assertIn(self.STANDARD_LINK, self.anfragen()[0])
+
+        # Neues Formular: Link ändern -> Anfrage nutzt ihn, Rücksprung auf die Seite davor
+        neu = 'https://www.example.org/formulare/Einwilligung_2027.pdf'
+        seite = self.einstellen(fotoeinwilligung_link=neu, zurueck='/?ansicht=alle')
+        self.assertIn('Einstellungen gespeichert', seite)
+        self.assertIn('Alle Hunde', seite)
+        [text] = self.anfragen()
+        self.assertIn(neu, text)
+        self.assertNotIn(self.STANDARD_LINK, text)
+        self.assertIn(neu, self.oeffne('/person/2/fotoeinwilligung').decode('utf-8'))
+        # Fremde Rücksprung-Ziele werden ignoriert
+        self.assertIn('Einstellungen gespeichert', self.einstellen(fotoeinwilligung_link=neu, zurueck='//boese.example'))
+
+        # Zurück auf den Standard
+        self.einstellen(standard='1', fotoeinwilligung_link=neu)
+        self.assertIn(self.STANDARD_LINK, self.anfragen()[0])
+        self.assertIn(self.STANDARD_LINK, self.oeffne('/einstellungen').decode('utf-8'))
 
 
 def html_unescape(text):

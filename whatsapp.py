@@ -59,3 +59,21 @@ def fehlende_daten_nachricht(vorname, hundename, punkte):
     zeilen += ['', 'Schick mir einfach ein Foto vom Impfpass bzw. den Nachweis hier per WhatsApp.',
                '', 'Danke und viele Grüße', ABSENDER]
     return '\n'.join(zeilen)
+
+
+def fotoeinwilligung_nachricht(vorname, hundenamen, formular_link):
+    """Bitte um die unterschriebene Einwilligung zu Fotoaufnahmen - mit Link zum Formular."""
+    if len(hundenamen) > 1:
+        mit = ' mit ' + ', '.join(hundenamen[:-1]) + ' und ' + hundenamen[-1]
+    elif hundenamen:
+        mit = ' mit ' + hundenamen[0]
+    else:
+        mit = ''
+    zeilen = [f'Hallo {vorname},', '',
+              f'damit wir im Verein Fotos und Videos von dir{mit} verwenden dürfen '
+              '(z. B. für Website, Berichte oder Flyer), brauche ich noch deine unterschriebene '
+              'Einwilligung zu Fotoaufnahmen.', '',
+              'Hier ist das Formular zum Ausdrucken:', formular_link, '',
+              'Bitte ausfüllen, unterschreiben und mir ein Foto oder einen Scan hier per WhatsApp schicken.',
+              '', 'Danke und viele Grüße', ABSENDER]
+    return '\n'.join(zeilen)

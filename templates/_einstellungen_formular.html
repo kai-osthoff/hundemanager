@@ -1,0 +1,23 @@
+{# Formular für Einstellungsdialog und Einstellungsseite. Erwartet: werte, einstellungen_info, zurueck #}
+<form method="POST" action="{{ url_for('einstellungen') }}">
+    <input type="hidden" name="zurueck" value="{{ zurueck or '' }}">
+    {% for schluessel, info in einstellungen_info.items() %}
+    <div class="form-group">
+        <label for="einstellung-{{ schluessel }}">{{ info.name }}</label>
+        <input type="{{ info.art }}" id="einstellung-{{ schluessel }}" name="{{ schluessel }}"
+               value="{{ werte[schluessel] or '' }}" placeholder="{{ info.standard }}" autocomplete="off">
+        <small>{{ info.hilfe }}
+            {% if werte[schluessel] %}<a href="{{ werte[schluessel] }}" target="_blank" rel="noopener">Link prüfen ↗</a>{% endif %}</small>
+    </div>
+    {% endfor %}
+    <div class="dialog-aktionen">
+        <button type="submit" name="standard" value="1" class="btn btn-secondary"
+                onclick="return confirm('Alle Einstellungen auf den Standard zurücksetzen?');">Standard wiederherstellen</button>
+        {% if zurueck %}
+        <button type="button" class="btn btn-secondary" onclick="this.closest('dialog').close();">Abbrechen</button>
+        {% else %}
+        <a href="{{ url_for('index') }}" class="btn btn-secondary">Abbrechen</a>
+        {% endif %}
+        <button type="submit" class="btn btn-primary">Speichern</button>
+    </div>
+</form>
