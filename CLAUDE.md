@@ -57,13 +57,14 @@ Entwickelt wird auf macOS, aber „läuft auf dem Mac“ heißt **nicht** fertig
 ## Arbeitsweise: ein Worktree pro Aufgabe, danach atomar committen und mergen
 
 - **Jede Aufgabe bekommt einen eigenen Git-Worktree mit eigenem Branch** – nie direkt
-  auf `main` im Hauptordner arbeiten:
-  `git worktree add ../worktrees/<aufgabe> -b <typ>/<aufgabe>` (z. B. `fix/impfdatum`).
-  Worktrees liegen **außerhalb** von `hundemanager_v5/`, sonst kopiert
-  `windows-test.sh` (robocopy `/MIR`) sie mit in die VM.
+  auf `main` im Hauptordner (`~/githubrepos/hundemanager`) arbeiten. Die Worktrees legt
+  Shepherd an (unter `~/githubrepos/.shepherd-worktrees/`). Ohne Shepherd:
+  `git worktree add ../.shepherd-worktrees/hundemanager-<aufgabe> -b <typ>/<aufgabe>`
+  (z. B. `fix/impfdatum`). Worktrees liegen **nie** innerhalb des Repo-Ordners, sonst
+  kopiert `windows-test.sh` (robocopy `/MIR`) sie mit in die VM.
 - Im Worktree gibt es kein `.venv` und kein `instance/`: Python aus dem Hauptordner
-  nehmen (`../../hundemanager_v5/.venv/bin/python …`); die App nie mit Saskias Daten
-  aus einem Worktree heraus starten.
+  nehmen (`~/githubrepos/hundemanager/.venv/bin/python …`); die App nie mit Saskias
+  Daten aus einem Worktree heraus starten.
 - **Abschluss jeder Aufgabe:** Tests grün (lokal + `./windows-test.sh`) → **ein
   atomarer Commit** (genau eine logische Änderung, Commit-Nachricht auf Deutsch) →
   ohne Rückfrage nach `main` mergen (`git merge --ff-only`, sonst vorher auf `main`
