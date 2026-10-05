@@ -68,9 +68,13 @@ Entwickelt wird auf macOS, aber „läuft auf dem Mac“ heißt **nicht** fertig
   atomarer Commit** (genau eine logische Änderung, Commit-Nachricht auf Deutsch) →
   ohne Rückfrage nach `main` mergen (`git merge --ff-only`, sonst vorher auf `main`
   rebasen) → Worktree und Branch löschen
-  (`git worktree remove …` und `git branch -d …`).
+  (`git worktree remove …` und `git branch -d …`) → **sofort `./release.sh`**
+  (siehe Releases). Erst mit dem Release ist die Aufgabe fertig.
 - Mehrere Aufgaben = mehrere Worktrees und mehrere Commits, nie gebündelt.
-- Merge ist kein Release: veröffentlicht wird weiterhin nur über `./release.sh`.
+- **Jeder fertige Worktree wird IMMER sofort released – ohne Rückfrage.** Wir sind in
+  einer frühen Phase und wollen schnell vorwärtskommen: lieber viele kleine Releases
+  als liegengebliebene Commits auf `main`. Veröffentlicht wird nur über `./release.sh`
+  (nie von Hand taggen), der Windows-Test bleibt die Sperre.
 
 ## ⚠️ Daten und Backups – nicht verhandelbar
 
@@ -137,6 +141,9 @@ Programm passiert erst nach einer geprüften Sicherung.**
 
 - **Versionen: nur 5.1.x, nur die letzte Stelle hochzählen** (5.1.1, 5.1.2, …).
   Viele kleine Schritte statt großer Sprünge.
+- **Nach jedem fertigen Worktree wird released** (siehe Arbeitsweise) – nicht sammeln,
+  nicht auf Rückfrage warten. Ist `release.sh` rot, ist die Aufgabe nicht fertig:
+  Fehler beheben (neuer Worktree) und erneut releasen.
 - `./release.sh "Notizen"` – ermittelt die nächste Nummer selbst, testet lokal,
   pusht und veröffentlicht **nur, wenn der Windows-Test grün ist**.
 - Die Notizen sieht Saskia im Update-Hinweis: verständlich und auf Deutsch.
