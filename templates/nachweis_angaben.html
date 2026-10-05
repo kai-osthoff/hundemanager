@@ -1,0 +1,85 @@
+<!-- templates/nachweis_angaben.html - Angaben zu einem Nachweis prüfen oder korrigieren -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="form-container">
+    <h2>{{ art_info.name }}-Nachweis {{ 'korrigieren' if nachweis else 'prüfen und speichern' }}</h2>
+    <p style="color: #55625A; margin-bottom: 15px;">
+        Hund: <strong>{{ hund.name }}</strong> ({{ hund.besitzer.vollstaendiger_name }})
+    </p>
+
+    <p style="margin-bottom: 15px;">
+        <a href="{{ url_for('nachweis_vorschau', sha256=sha256, endung=endung) }}" target="_blank" class="knopf">Dokument ansehen</a>
+    </p>
+
+    {% if text_erkannt %}
+        <div class="flash success">Angaben wurden aus dem Dokument erkannt – bitte kurz prüfen.</div>
+    {% elif not nachweis %}
+        <div class="flash" style="background: #E4E8E5;">Bitte die Angaben aus dem Dokument eintragen.</div>
+    {% endif %}
+    {% for w in warnungen %}
+        <div class="flash error">⚠ {{ w }}</div>
+    {% endfor %}
+
+    <form method="POST" action="{{ url_for('nachweis_bearbeiten', nachweis_id=nachweis.id) if nachweis else url_for('nachweis_speichern', hund_id=hund.id) }}">
+        <input type="hidden" name="art" value="{{ art }}">
+        <input type="hidden" name="sha256" value="{{ sha256 }}">
+        <input type="hidden" name="endung" value="{{ endung }}">
+        <input type="hidden" name="original_name" value="{{ original_name or '' }}">
+
+        <div class="form-group">
+            <label for="gueltig_bis" {% if art_info.gueltig_pflicht %}class="required"{% endif %}>Gültig bis</label>
+            <input type="date" id="gueltig_bis" name="gueltig_bis" value="{{ vorschlag.get('gueltig_bis')|iso_datum }}" {% if art_info.gueltig_pflicht %}required{% endif %}>
+        </div>
+        <div class="form-group">
+            <label for="ausgestellt_am">Ausgestellt am</label>
+            <input type="date" id="ausgestellt_am" name="ausgestellt_am" value="{{ vorschlag.get('ausgestellt_am')|iso_datum }}">
+        </div>
+        <div class="form-group">
+            <label for="eingereicht_von">Eingereicht von</label>
+            <input type="text" id="eingereicht_von" name="eingereicht_von" value="{{ vorschlag.get('eingereicht_von') or '' }}">
+        </div>
+        <div class="form-group">
+            <label for="aussteller">Quelle: {{ art_info.aussteller }}</label>
+            <input type="text" id="aussteller" name="aussteller" value="{{ vorschlag.get('aussteller') or vorschlag.get('versicherer') or '' }}">
+        </div>
+        {% if art_info.nummer %}
+        <div class="form-group">
+            <label for="nummer">{{ art_info.nummer }}</label>
+            <input type="text" id="nummer" name="nummer" value="{{ vorschlag.get('nummer') or vorschlag.get('vertragsnummer') or '' }}">
+        </div>
+        {% endif %}
+        {% if art_info.tierdaten %}
+        <div class="form-group">
+            <label for="tier_laut_nachweis">Tier laut Nachweis</label>
+            <input type="text" id="tier_laut_nachweis" name="tier_laut_nachweis" value="{{ vorschlag.get('tier') or vorschlag.get('tier_laut_nachweis') or '' }}">
+        </div>
+        <div class="form-group">
+            <label for="chipnummer">Chipnummer</label>
+            <input type="text" id="chipnummer" name="chipnummer" value="{{ vorschlag.get('chipnummer') or '' }}">
+        </div>
+        {% endif %}
+        {% if art_info.impfungen %}
+        <fieldset class="form-group" style="border: 0;">
+            <legend style="font-weight: 500; margin-bottom: 6px;">Belegte Impfungen</legend>
+            <div style="display: flex; gap: 18px; flex-wrap: wrap;">
+            {% for name in impfungen_auswahl %}
+                <label style="display: flex; align-items: center; gap: 6px; min-height: 44px;">
+                    <input type="checkbox" name="impfungen" value="{{ name }}" style="width: auto;" {% if name in vorschlag.get('impfungen_liste', []) %}checked{% endif %}> {{ name }}
+                </label>
+            {% endfor %}
+            </div>
+        </fieldset>
+        {% endif %}
+        <div class="form-group">
+            <label for="bemerkung">Bemerkung</label>
+            <textarea id="bemerkung" name="bemerkung" style="min-height: 70px;">{{ vorschlag.get('bemerkung') or '' }}</textarea>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Speichern</button>
+            <a href="{{ url_for('hund_nachweise', hund_id=hund.id, art=art) }}" class="btn btn-secondary">Abbrechen</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

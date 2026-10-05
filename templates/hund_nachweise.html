@@ -1,0 +1,88 @@
+<!-- templates/hund_nachweise.html - alle Nachweise eines Hundes als Historie -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="leiste">
+    <a href="{{ url_for('index') }}" class="knopf">← Zur Übersicht</a>
+    <a href="{{ url_for('nachweise_uebersicht') }}" class="knopf">Alle Nachweise</a>
+</div>
+
+<div class="form-container" style="max-width: 1180px;">
+    <h2>Nachweise – {{ hund.name }}</h2>
+    <p style="color: #55625A; margin-bottom: 20px;">Halter: <strong>{{ hund.besitzer.vollstaendiger_name }}</strong></p>
+
+    <nav class="filter" aria-label="Art des Nachweises" style="margin-bottom: 20px;">
+        {% for schluessel, info in arten.items() %}
+        <a href="{{ url_for('hund_nachweise', hund_id=hund.id, art=schluessel) }}" {% if schluessel == gewaehlte_art %}aria-current="page"{% endif %}>{{ info.name }} ({{ hund.nachweise_der_art(schluessel)|length }})</a>
+        {% endfor %}
+    </nav>
+
+    {% set liste = hund.nachweise_der_art(gewaehlte_art) %}
+    {% if gewaehlte_art == 'haftpflicht' %}
+        {% set aktuell = hund.aktueller_nachweis %}
+        {% if aktuell %}
+            <p>Aktuell nachgewiesen bis
+                <span class="status-cell status-{{ aktuell.status }}">{{ aktuell.gueltig_bis|format_datum }}</span>
+                {% if aktuell.erinnern_ab %}<span style="color: #55625A;"> · neuen Nachweis anfordern ab {{ aktuell.erinnern_ab|format_datum }}</span>{% endif %}
+            </p>
+        {% elif hund.haftpflicht_gueltig %}
+            <p><span class="badge badge-success">Ja</span> – bisher nur angekreuzt, <strong>noch kein Nachweis hinterlegt</strong>.</p>
+        {% else %}
+            <p><span class="badge badge-danger">Kein Nachweis</span></p>
+        {% endif %}
+    {% endif %}
+
+    <h3 style="margin-top: 22px;">Neuen {{ arten[gewaehlte_art].name }}-Nachweis hochladen</h3>
+    <p style="color: #55625A; font-size: 0.9rem; margin-bottom: 10px;">
+        {% if gewaehlte_art == 'haftpflicht' %}PDF der Versicherung oder ein Foto. Bei PDFs werden die Angaben automatisch erkannt.
+        {% else %}Foto der Impfpass-Seite (JPG/PNG) oder ein PDF.{% endif %}
+    </p>
+    <form action="{{ url_for('nachweis_hochladen', hund_id=hund.id) }}" method="POST" enctype="multipart/form-data">
+        <input type="hidden" name="art" value="{{ gewaehlte_art }}">
+        <div class="form-group">
+            <label for="datei">Datei</label>
+            <input type="file" id="datei" name="datei" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Hochladen</button>
+    </form>
+</div>
+
+<div class="table-container" style="max-width: 1180px; margin: 24px auto;">
+    <table>
+        <thead>
+            <tr>
+                <th>Gültig bis</th>
+                <th>Eingereicht von</th>
+                <th>Quelle</th>
+                <th>{{ 'Vertragsnummer' if gewaehlte_art == 'haftpflicht' else 'Impfungen' }}</th>
+                <th>Ausgestellt</th>
+                <th>Hochgeladen</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for n in liste %}
+            <tr>
+                <td>{% if n.gueltig_bis %}<span class="status-cell status-{{ n.status }}">{{ n.gueltig_bis|format_datum }}</span>{% else %}-{% endif %}</td>
+                <td>{{ n.eingereicht_von or '-' }}</td>
+                <td>{{ n.aussteller or '-' }}<div style="font-size: 0.8rem; color: #55625A;">{{ n.original_name or '' }}</div></td>
+                <td>{{ (n.nummer if gewaehlte_art == 'haftpflicht' else n.impfungen) or '-' }}</td>
+                <td>{{ n.ausgestellt_am|format_datum }}</td>
+                <td>{{ n.hochgeladen_am.strftime('%d.%m.%Y %H:%M') }}</td>
+                <td>
+                    <div class="person-actions">
+                        <a href="{{ url_for('nachweis_datei', nachweis_id=n.id) }}" target="_blank" class="knopf">Ansehen</a>
+                        <a href="{{ url_for('nachweis_bearbeiten', nachweis_id=n.id) }}" class="knopf">Korrigieren</a>
+                    </div>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" style="color: #55625A; font-style: italic;">Noch keine {{ arten[gewaehlte_art].name }}-Nachweise hinterlegt</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<p style="text-align: center; color: #55625A; font-size: 0.85rem;">
+    Alle Nachweise bleiben dauerhaft gespeichert und werden mitgesichert – auch abgelaufene.
+</p>
+{% endblock %}

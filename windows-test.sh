@@ -18,13 +18,15 @@ case "$(prlctl list "$VM" -o status --no-header | tr -d ' ')" in
     stopped) prlctl start "$VM" >/dev/null; sleep 40 ;;
 esac
 
-# Alter Stand für den Test "Update von v5.1.0" - in der VM gibt es kein git
+# Alte Stände für die Update-Tests - in der VM gibt es kein git
 mkdir -p .windows-test
-git archive --format=zip -o .windows-test/v5.1.0.zip v5.1.0
+for tag in v5.1.0 v5.1.2; do
+    git archive --format=zip -o ".windows-test/$tag.zip" "$tag"
+done
 
 # Mac-Ordner ist in der VM unter \\Mac\Home erreichbar - getestet wird auf einer Kopie auf C:
 # (der geteilte Ordner verhält sich wie ein Netzlaufwerk, nicht wie NTFS)
 REL="${PWD#"$HOME"/}"
 QUELLE="\\\\Mac\\Home\\${REL//\//\\}"
 
-prlctl exec "$VM" --current-user cmd /c "robocopy \"$QUELLE\" $ZIEL /MIR /XD .venv instance __pycache__ .git /NFL /NDL /NJH /NJS /NP >nul & cd /d $ZIEL && \"$PY\" -m pip install --disable-pip-version-check -q -r requirements.txt && set HUNDEMANAGER_TEST_V510_ZIP=$ZIEL\\.windows-test\\v5.1.0.zip&& \"$PY\" -m unittest discover -s tests $*"
+prlctl exec "$VM" --current-user cmd /c "robocopy \"$QUELLE\" $ZIEL /MIR /XD .venv instance __pycache__ .git /NFL /NDL /NJH /NJS /NP >nul & cd /d $ZIEL && \"$PY\" -m pip install --disable-pip-version-check -q -r requirements.txt && set HUNDEMANAGER_TEST_ARCHIV=$ZIEL\\.windows-test&& \"$PY\" -m unittest discover -s tests $*"

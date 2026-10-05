@@ -96,8 +96,19 @@ Programm passiert erst nach einer geprüften Sicherung.**
   Nur nullable oder mit Default; Umbenennen/Löschen braucht eine eigene Migration.
 - Jeder neue Ernstfall bekommt einen Test in `tests/` – vor allem Update-Übergänge.
 
-## Haftpflicht-Nachweise
+## Nachweise (Haftpflicht, Impfpass, …)
 
+- EINE Ablage für alle Dokumente: Modell `Nachweis` mit Feld `art`. Die Arten und ihre
+  Felder stehen in `NACHWEIS_ARTEN` (app.py) – neue Art = Eintrag dort, keine neue Tabelle.
+  Gemeinsam: eingereicht von (Halter beim Hochladen), Quelle/Aussteller, Nummer,
+  ausgestellt am, gültig bis, Originaldatei. Haftpflicht: Gültigkeit Pflicht, Tier/Chip.
+  Impfpass: belegte Impfungen, Gültigkeit optional.
+- `/nachweise` zeigt die Historie aller Nachweise und „Neuen Nachweis anfordern“: der je
+  Hund und Art aktuellste Nachweis aktiver Halter, wenn er innerhalb von
+  `ERINNERUNG_VORLAUF` (6 Wochen) abläuft – Grundlage für spätere Erinnerungen.
+- 5.1.1/5.1.2 hatten die Tabelle `haftpflicht_nachweis`; `migriere_datenbank()` übernimmt
+  sie einmalig nach `nachweis` (mit Sicherung, Zählprüfung). Die alte Tabelle bleibt
+  bewusst stehen – nie löschen.
 - Dateien liegen unveränderlich in `instance/nachweise/<sha256>.<pdf|jpg|png>` –
   nie überschreiben, nie löschen. Ein neuer Nachweis kommt *dazu*, alte bleiben als
   Historie. Korrigiert werden nur die Angaben in der Datenbank, nie die Datei.
@@ -108,8 +119,9 @@ Programm passiert erst nach einer geprüften Sicherung.**
 - **Datenschutz:** Echte Nachweise enthalten Namen, Adressen, Vertragsnummern.
   Nie ins Repo (`.gitignore` sperrt PDFs/Bilder), nie in Tests, nie in Commits,
   Release-Notizen oder Issues zitieren. Tests nutzen erfundene Daten (`test_pdf()`).
-- Erkennung (`nachweise.angaben_vorschlagen`) liefert nur Vorschläge; pypdf gibt
-  Textblöcke in beliebiger Reihenfolge aus – Muster nie an der Reihenfolge festmachen.
+- Erkennung (`nachweise.angaben_vorschlagen`) liefert nur Vorschläge (bisher nur
+  Haftpflicht-PDFs); pypdf gibt Textblöcke in beliebiger Reihenfolge aus – Muster nie
+  an der Reihenfolge festmachen.
 
 ## Releases
 

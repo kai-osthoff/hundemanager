@@ -4,6 +4,7 @@
 {% block kopf_aktionen %}
 <div style="display: flex; gap: 10px; flex-wrap: wrap;">
     <a href="{{ url_for('person_neu') }}" class="btn-rund btn-hell">+ Neue Person</a>
+    <a href="{{ url_for('nachweise_uebersicht') }}" class="btn-rund btn-umriss">Nachweise</a>
     <a href="{{ url_for('export_excel') }}" class="btn-rund btn-umriss">Excel-Export</a>
 </div>
 {% endblock %}
@@ -71,7 +72,7 @@
                 {% endfor %}
             </dl>
 
-            <a href="{{ url_for('haftpflicht', hund_id=hund.id) }}" class="haft-zeile haft-{{ h.haftpflicht }}">
+            <a href="{{ url_for('hund_nachweise', hund_id=hund.id) }}" class="haft-zeile haft-{{ h.haftpflicht }}">
                 {% if h.nachweis %}
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 14l2 2 3-4"/></svg>
                     <span>Haftpflicht bis {{ h.nachweis.gueltig_bis|format_datum }}{% if h.haftpflicht == 'abgelaufen' %} – abgelaufen{% endif %}</span>

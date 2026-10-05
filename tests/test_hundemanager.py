@@ -89,6 +89,16 @@ def ordner_loeschen(pfad):
             time.sleep(0.5)
 
 
+def alter_stand(tag):
+    """ZIP eines veröffentlichten Stands. In der Windows-VM gibt es kein git -
+    windows-test.sh legt die ZIPs vorher in HUNDEMANAGER_TEST_ARCHIV ab."""
+    ordner = os.environ.get('HUNDEMANAGER_TEST_ARCHIV')
+    if ordner:
+        return lies_bytes(os.path.join(ordner, f'{tag}.zip'))
+    return subprocess.run(['git', 'archive', '--format=zip', tag], cwd=REPO,
+                          capture_output=True, check=True).stdout
+
+
 def zaehle(pfad):
     with closing(sqlite3.connect(pfad)) as v:
         return {t: v.execute(f'SELECT COUNT(*) FROM {t}').fetchone()[0] for t in ('person', 'hund')}
@@ -549,6 +559,48 @@ class UpdateTests(unittest.TestCase):
         self.pruefe_alte_version_wiederhergestellt()
         self.pruefe_daten_unveraendert()
 
+    def test_update_von_5_1_2_uebernimmt_haftpflicht_nachweise(self):
+        """5.1.2 hatte eine eigene Haftpflicht-Tabelle - nach dem Update muss alles in der
+        gemeinsamen Nachweis-Ablage stehen, die alte Tabelle bleibt unangetastet."""
+        ordner_loeschen(self.app_dir)
+        os.makedirs(self.app_dir)
+        with zipfile.ZipFile(io.BytesIO(alter_stand('v5.1.2'))) as zf:
+            zf.extractall(self.app_dir)  # git archive: ohne Oberordner
+        os.makedirs(os.path.join(self.app_dir, 'instance'), exist_ok=True)
+        db_anlegen(self.db)
+        self.release(release_zip(self.NEU))
+        self.ALT = '5.1.2'
+        self.starten()
+
+        # Wie Saskia in 5.1.2: Nachweis über die alte Oberfläche hochladen
+        pdf = test_pdf(bestaetigung_zeilen(date.today()))
+        koerper, typ = multipart('datei', 'Bestätigung.pdf', pdf)
+        anfrage = urllib.request.Request(self.url('/hund/1/haftpflicht/hochladen'), data=koerper, method='POST')
+        anfrage.add_header('Content-Type', typ)
+        seite = self.browser.open(anfrage, timeout=30).read().decode('utf-8')
+        sha = re.search(r'name="sha256" value="([0-9a-f]{64})"', seite).group(1)
+        formular = urllib.parse.urlencode({
+            'sha256': sha, 'endung': 'pdf', 'original_name': 'Bestätigung.pdf',
+            'gueltig_bis': '2027-10-04', 'ausgestellt_am': '2026-10-05',
+            'versicherer': 'Musterversicherung AG', 'vertragsnummer': 'XY-1234567890',
+            'tier_laut_nachweis': 'Bello', 'chipnummer': '276000000000001',
+        }).encode()
+        self.browser.open(urllib.request.Request(self.url('/hund/1/haftpflicht/speichern'),
+                                                 data=formular, method='POST'), timeout=30).read()
+
+        self.assertIn('wurde installiert', self.update_klicken())
+        self.assertEqual(self.warte_auf_neustart(), self.NEU)
+
+        historie = self.seite('/nachweise')
+        for erwartet in ('XY-1234567890', 'Musterversicherung AG', 'Jürgen Müller', 'Bello'):
+            self.assertIn(erwartet, historie)
+        self.assertIn('Haftpflicht bis 04.10.2027', self.seite('/'))
+        self.assertEqual(self.browser.open(self.url('/nachweis/1/datei'), timeout=10).read(), pdf)
+        with closing(sqlite3.connect(self.db)) as v:
+            self.assertEqual(v.execute('SELECT COUNT(*) FROM haftpflicht_nachweis').fetchone()[0], 1)
+            self.assertEqual(v.execute("SELECT COUNT(*) FROM nachweis WHERE art='haftpflicht'").fetchone()[0], 1)
+        self.assertGreaterEqual(len(self.sicherungen('vor-migration')), 1)
+
     def test_wiederherstellen_ueber_die_oberflaeche(self):
         db_anlegen(self.db)
         self.release(release_zip(self.NEU))
@@ -571,12 +623,7 @@ class UpdateTests(unittest.TestCase):
         """Der echte Übergang bei Saskia: alter Updater und alter Starter aus v5.1.0."""
         ordner_loeschen(self.app_dir)
         os.makedirs(self.app_dir)
-        vorbereitet = os.environ.get('HUNDEMANAGER_TEST_V510_ZIP')  # windows-test.sh (VM ohne git)
-        if vorbereitet:
-            archiv = lies_bytes(vorbereitet)
-        else:
-            archiv = subprocess.run(['git', 'archive', '--format=zip', 'v5.1.0'], cwd=REPO,
-                                    capture_output=True, check=True).stdout
+        archiv = alter_stand('v5.1.0')
         with zipfile.ZipFile(io.BytesIO(archiv)) as zf:
             zf.extractall(self.app_dir)
         os.makedirs(os.path.join(self.app_dir, 'instance'))
@@ -791,6 +838,50 @@ class HaftpflichtOberflaecheTests(unittest.TestCase):
         self.assertIn('Pausiert (3)', seite)
         self.assertNotIn('Noch keine Einträge', seite)
         self.assertIn('Bello', self.oeffne('/?ansicht=alle').decode('utf-8'))
+
+    def nachweis_speichern(self, art, datei, dateiname, felder):
+        koerper, typ = multipart('datei', dateiname, datei)
+        # Art steckt im Upload-Formular als eigenes Feld
+        grenze = typ.split('boundary=')[1]
+        koerper = (f'--{grenze}\r\nContent-Disposition: form-data; name="art"\r\n\r\n{art}\r\n').encode() + koerper
+        seite = self.oeffne('/hund/1/nachweise/hochladen', koerper, typ).decode('utf-8')
+        sha = re.search(r'name="sha256" value="([0-9a-f]{64})"', seite).group(1)
+        endung = re.search(r'name="endung" value="(\w+)"', seite).group(1)
+        daten = [('art', art), ('sha256', sha), ('endung', endung), ('original_name', dateiname)]
+        for name, wert in felder.items():
+            for w in (wert if isinstance(wert, list) else [wert]):
+                daten.append((name, w))
+        return self.oeffne('/hund/1/nachweise/speichern', urllib.parse.urlencode(daten).encode()).decode('utf-8')
+
+    def test_impfpass_foto_in_derselben_ablage(self):
+        foto = b'\xff\xd8\xff\xe0' + b'Impfpass-Foto' * 50
+        seite = self.nachweis_speichern('impfpass', foto, 'impfpass.jpg', {
+            'eingereicht_von': 'Jürgen Müller', 'aussteller': 'Tierarztpraxis Muster',
+            'gueltig_bis': '2027-03-01', 'impfungen': ['SHP/DAP/DHP', 'L']})
+        self.assertIn('Impfpass-Nachweis für Bello gespeichert', seite)
+        self.assertIn('SHP/DAP/DHP, L', seite)
+        historie = self.oeffne('/nachweise?art=impfpass').decode('utf-8')
+        self.assertIn('Tierarztpraxis Muster', historie)
+        self.assertEqual(self.oeffne('/nachweis/1/datei'), foto)
+        # Impfpass ohne Gültigkeitsdatum ist erlaubt, Haftpflicht nicht
+        seite = self.nachweis_speichern('impfpass', foto + b'2', 'seite2.jpg', {'impfungen': ['T']})
+        self.assertIn('Impfpass-Nachweis für Bello gespeichert', seite)
+        seite = self.nachweis_speichern('haftpflicht', foto + b'3', 'haft.jpg', {'gueltig_bis': ''})
+        self.assertIn('Bitte angeben, bis wann der Nachweis gültig ist', seite)
+
+    def test_bald_ablaufende_nachweise_zum_erinnern(self):
+        bald = (date.today() + timedelta(days=20)).isoformat()
+        self.nachweis_speichern('haftpflicht', test_pdf(['A']), 'alt.pdf', {'gueltig_bis': bald})
+        seite = self.oeffne('/nachweise').decode('utf-8')
+        self.assertIn('Neuen hochladen', seite)
+        self.assertIn('in 20 Tagen', seite)
+        # Neuer Nachweis eingereicht -> keine Erinnerung mehr, alter bleibt in der Historie
+        spaeter = (date.today() + timedelta(days=365)).isoformat()
+        self.nachweis_speichern('haftpflicht', test_pdf(['B']), 'neu.pdf', {'gueltig_bis': spaeter})
+        seite = self.oeffne('/nachweise').decode('utf-8')
+        self.assertIn('Gerade muss niemand einen neuen Nachweis einreichen', seite)
+        self.assertIn('alt.pdf', self.oeffne('/hund/1/nachweise').decode('utf-8'))
+        self.assertIn('neu.pdf', self.oeffne('/hund/1/nachweise').decode('utf-8'))
 
     def test_falsche_datei_wird_abgelehnt(self):
         koerper, typ = multipart('datei', 'virus.exe', b'MZ\x90\x00')

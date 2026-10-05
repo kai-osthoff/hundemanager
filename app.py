@@ -54,30 +54,78 @@ class Hund(db.Model):
     haftpflicht_gueltig = db.Column(db.Boolean, default=False)  # alte Ja/Nein-Angabe ohne Nachweis
     bemerkung = db.Column(db.Text, nullable=True)
     person_id = db.Column(db.Integer, db.ForeignKey('person.id'), nullable=False)
-    nachweise = db.relationship('HaftpflichtNachweis', backref='hund', lazy=True,
+    nachweise = db.relationship('Nachweis', backref='hund', lazy=True,
                                 cascade='all, delete-orphan',
-                                order_by='HaftpflichtNachweis.gueltig_bis.desc()')
+                                order_by='Nachweis.hochgeladen_am.desc()')
+
+    def nachweise_der_art(self, art):
+        """Nachweise einer Art, der am längsten gültige zuerst (ohne Datum zuletzt)."""
+        return sorted((n for n in self.nachweise if n.art == art),
+                      key=lambda n: (n.gueltig_bis is not None, n.gueltig_bis or date.min, n.hochgeladen_am),
+                      reverse=True)
 
     @property
     def aktueller_nachweis(self):
-        """Der Nachweis mit der längsten Gültigkeit - ältere bleiben als Historie erhalten."""
-        return self.nachweise[0] if self.nachweise else None
+        """Der Haftpflicht-Nachweis mit der längsten Gültigkeit - ältere bleiben als Historie erhalten."""
+        haftpflicht = self.nachweise_der_art('haftpflicht')
+        return haftpflicht[0] if haftpflicht else None
 
 
-class HaftpflichtNachweis(db.Model):
-    """Ein hochgeladener Nachweis. Die Datei selbst liegt unveränderlich in instance/nachweise/."""
+# Alle Nachweise liegen in EINER Ablage - die Art bestimmt Felder und Ablauf.
+# Neue Arten (z.B. Wesenstest) hier ergänzen; die Datei-Ablage und Sicherung bleiben gleich.
+NACHWEIS_ARTEN = {
+    'haftpflicht': {
+        'name': 'Haftpflicht',
+        'aussteller': 'Versicherer',
+        'nummer': 'Vertragsnummer',
+        'gueltig_pflicht': True,     # ohne Gültigkeit kein Haftpflicht-Nachweis
+        'tierdaten': True,           # Tier und Chip laut Dokument
+        'impfungen': False,
+    },
+    'impfpass': {
+        'name': 'Impfpass',
+        'aussteller': 'Tierarzt / Praxis',
+        'nummer': None,
+        'gueltig_pflicht': False,
+        'tierdaten': False,
+        'impfungen': True,           # welche Impfungen das Foto belegt
+    },
+}
+# So lange vor Ablauf soll später an einen neuen Nachweis erinnert werden
+ERINNERUNG_VORLAUF = relativedelta(weeks=6)
+
+
+class Nachweis(db.Model):
+    """Ein eingereichtes Dokument. Die Datei selbst liegt unveränderlich in instance/nachweise/."""
     id = db.Column(db.Integer, primary_key=True)
     hund_id = db.Column(db.Integer, db.ForeignKey('hund.id'), nullable=False)
+    art = db.Column(db.String(20), nullable=False, default='haftpflicht')
     datei_sha256 = db.Column(db.String(64), nullable=False)
     datei_endung = db.Column(db.String(4), nullable=False)
     original_name = db.Column(db.String(255), nullable=True)
     hochgeladen_am = db.Column(db.DateTime, nullable=False, default=datetime.now)
+    eingereicht_von = db.Column(db.String(200), nullable=True)   # Halter beim Hochladen
+    aussteller = db.Column(db.String(200), nullable=True)        # Quelle: Versicherer, Tierarzt ...
+    nummer = db.Column(db.String(100), nullable=True)            # Vertrags-/Dokumentnummer
     ausgestellt_am = db.Column(db.Date, nullable=True)
-    gueltig_bis = db.Column(db.Date, nullable=False)
-    versicherer = db.Column(db.String(200), nullable=True)
-    vertragsnummer = db.Column(db.String(100), nullable=True)
+    gueltig_bis = db.Column(db.Date, nullable=True)
     tier_laut_nachweis = db.Column(db.String(100), nullable=True)
     chipnummer = db.Column(db.String(30), nullable=True)
+    impfungen = db.Column(db.String(100), nullable=True)         # z.B. "SHP/DAP/DHP, L"
+    bemerkung = db.Column(db.Text, nullable=True)
+
+    @property
+    def art_name(self):
+        return NACHWEIS_ARTEN.get(self.art, {}).get('name', self.art)
+
+    @property
+    def status(self):
+        return get_status(self.gueltig_bis)
+
+    @property
+    def erinnern_ab(self):
+        return self.gueltig_bis - ERINNERUNG_VORLAUF if self.gueltig_bis else None
+
 
 def get_status(datum):
     """Prüft den Status eines Gültigkeitsdatums"""
@@ -322,7 +370,7 @@ def hund_loeschen(hund_id):
     flash(f'Hund "{name}" wurde gelöscht.', 'success')
     return redirect(url_for('index'))
 
-# --- Haftpflicht-Nachweise ---
+# --- Nachweise (Haftpflicht, Impfpass, ...) ---
 
 @app.errorhandler(413)
 def datei_zu_gross(_fehler):
@@ -332,57 +380,83 @@ def datei_zu_gross(_fehler):
 
 @app.route('/hund/<int:hund_id>/haftpflicht')
 def haftpflicht(hund_id):
+    """Alte Adresse aus 5.1.1/5.1.2 - führt zur Nachweis-Seite des Hundes."""
+    return redirect(url_for('hund_nachweise', hund_id=hund_id))
+
+
+@app.route('/hund/<int:hund_id>/nachweise')
+def hund_nachweise(hund_id):
     hund = Hund.query.get_or_404(hund_id)
-    return render_template('haftpflicht.html', hund=hund, heute=date.today())
+    art = request.args.get('art', 'haftpflicht')
+    return render_template('hund_nachweise.html', hund=hund, arten=NACHWEIS_ARTEN,
+                           gewaehlte_art=art if art in NACHWEIS_ARTEN else 'haftpflicht')
 
 
+@app.route('/hund/<int:hund_id>/nachweise/hochladen', methods=['POST'])
 @app.route('/hund/<int:hund_id>/haftpflicht/hochladen', methods=['POST'])
-def haftpflicht_hochladen(hund_id):
+def nachweis_hochladen(hund_id):
     hund = Hund.query.get_or_404(hund_id)
+    art = request.form.get('art', 'haftpflicht')
+    if art not in NACHWEIS_ARTEN:
+        art = 'haftpflicht'
     datei = request.files.get('datei')
     if not datei or not datei.filename:
         flash('Bitte eine Datei auswählen.', 'error')
-        return redirect(url_for('haftpflicht', hund_id=hund.id))
+        return redirect(url_for('hund_nachweise', hund_id=hund.id, art=art))
 
     daten = datei.read()
     try:
         sha256, endung = nachweise.speichern(daten)
     except nachweise.NachweisFehler as e:
         flash(str(e), 'error')
-        return redirect(url_for('haftpflicht', hund_id=hund.id))
+        return redirect(url_for('hund_nachweise', hund_id=hund.id, art=art))
 
-    vorschlag = nachweise.angaben_vorschlagen(nachweise.pdf_text(daten)) if endung == 'pdf' else {}
+    vorschlag = {'eingereicht_von': hund.besitzer.vollstaendiger_name}
     warnungen = []
-    tier = vorschlag.get('tier')
-    if tier and hund.name.casefold() not in tier.casefold():
-        warnungen.append(f'Im Nachweis steht das Tier „{tier}“ – passt das zu {hund.name}?')
+    erkannt = False
+    if art == 'haftpflicht' and endung == 'pdf':
+        erkannt_daten = nachweise.angaben_vorschlagen(nachweise.pdf_text(daten))
+        erkannt = bool(erkannt_daten)
+        vorschlag.update(erkannt_daten)
+        tier = vorschlag.get('tier')
+        if tier and hund.name.casefold() not in tier.casefold():
+            warnungen.append(f'Im Nachweis steht das Tier „{tier}“ – passt das zu {hund.name}?')
     gueltig_bis = vorschlag.get('gueltig_bis')
     if gueltig_bis and gueltig_bis < date.today():
         warnungen.append('Laut Dokument ist dieser Nachweis bereits abgelaufen.')
 
-    return render_template('haftpflicht_angaben.html', hund=hund, nachweis=None, vorschlag=vorschlag,
-                           warnungen=warnungen, sha256=sha256, endung=endung,
-                           original_name=os.path.basename(datei.filename)[:255],
-                           text_erkannt=bool(vorschlag))
+    return render_template('nachweis_angaben.html', hund=hund, nachweis=None, art=art,
+                           art_info=NACHWEIS_ARTEN[art], impfungen_auswahl=[n for n, _ in IMPFUNGEN],
+                           vorschlag=vorschlag, warnungen=warnungen, sha256=sha256, endung=endung,
+                           original_name=os.path.basename(datei.filename)[:255], text_erkannt=erkannt)
 
 
 def _nachweis_angaben(nachweis):
     """Übernimmt die Formularfelder. Gibt eine Fehlermeldung zurück oder None."""
+    art_info = NACHWEIS_ARTEN[nachweis.art]
     gueltig_bis = parse_datum(request.form.get('gueltig_bis'))
-    if not gueltig_bis:
+    if art_info['gueltig_pflicht'] and not gueltig_bis:
         return 'Bitte angeben, bis wann der Nachweis gültig ist.'
     nachweis.gueltig_bis = gueltig_bis
     nachweis.ausgestellt_am = parse_datum(request.form.get('ausgestellt_am'))
-    nachweis.versicherer = request.form.get('versicherer', '').strip()[:200] or None
-    nachweis.vertragsnummer = request.form.get('vertragsnummer', '').strip()[:100] or None
+    nachweis.eingereicht_von = request.form.get('eingereicht_von', '').strip()[:200] or None
+    nachweis.aussteller = request.form.get('aussteller', '').strip()[:200] or None
+    nachweis.nummer = request.form.get('nummer', '').strip()[:100] or None
     nachweis.tier_laut_nachweis = request.form.get('tier_laut_nachweis', '').strip()[:100] or None
     nachweis.chipnummer = request.form.get('chipnummer', '').strip()[:30] or None
+    gueltige = [n for n, _ in IMPFUNGEN]
+    nachweis.impfungen = ', '.join(i for i in request.form.getlist('impfungen') if i in gueltige) or None
+    nachweis.bemerkung = request.form.get('bemerkung', '').strip() or None
     return None
 
 
+@app.route('/hund/<int:hund_id>/nachweise/speichern', methods=['POST'])
 @app.route('/hund/<int:hund_id>/haftpflicht/speichern', methods=['POST'])
-def haftpflicht_speichern(hund_id):
+def nachweis_speichern(hund_id):
     hund = Hund.query.get_or_404(hund_id)
+    art = request.form.get('art', 'haftpflicht')
+    if art not in NACHWEIS_ARTEN:
+        art = 'haftpflicht'
     sha256 = request.form.get('sha256', '')
     endung = request.form.get('endung', '')
     try:
@@ -390,26 +464,30 @@ def haftpflicht_speichern(hund_id):
             raise nachweise.NachweisFehler('Die hochgeladene Datei wurde nicht gefunden.')
     except nachweise.NachweisFehler as e:
         flash(f'{e} Bitte erneut hochladen.', 'error')
-        return redirect(url_for('haftpflicht', hund_id=hund.id))
+        return redirect(url_for('hund_nachweise', hund_id=hund.id, art=art))
 
-    nachweis = HaftpflichtNachweis(hund_id=hund.id, datei_sha256=sha256, datei_endung=endung,
-                                   original_name=request.form.get('original_name', '')[:255] or None)
+    nachweis = Nachweis(hund_id=hund.id, art=art, datei_sha256=sha256, datei_endung=endung,
+                        original_name=request.form.get('original_name', '')[:255] or None)
     fehler = _nachweis_angaben(nachweis)
     if fehler:
         flash(fehler, 'error')
-        return render_template('haftpflicht_angaben.html', hund=hund, nachweis=None,
-                               vorschlag=request.form, warnungen=[], sha256=sha256, endung=endung,
+        vorschlag = request.form.to_dict()
+        vorschlag['impfungen_liste'] = request.form.getlist('impfungen')
+        return render_template('nachweis_angaben.html', hund=hund, nachweis=None, art=art,
+                               art_info=NACHWEIS_ARTEN[art], impfungen_auswahl=[n for n, _ in IMPFUNGEN],
+                               vorschlag=vorschlag, warnungen=[], sha256=sha256, endung=endung,
                                original_name=nachweis.original_name, text_erkannt=False)
     db.session.add(nachweis)
     db.session.commit()
-    flash(f'Haftpflicht-Nachweis für {hund.name} gespeichert (gültig bis {format_datum(nachweis.gueltig_bis)}).', 'success')
-    return redirect(url_for('haftpflicht', hund_id=hund.id))
+    gueltig = f' (gültig bis {format_datum(nachweis.gueltig_bis)})' if nachweis.gueltig_bis else ''
+    flash(f'{nachweis.art_name}-Nachweis für {hund.name} gespeichert{gueltig}.', 'success')
+    return redirect(url_for('hund_nachweise', hund_id=hund.id, art=art))
 
 
 @app.route('/nachweis/<int:nachweis_id>/bearbeiten', methods=['GET', 'POST'])
 def nachweis_bearbeiten(nachweis_id):
     """Angaben korrigieren - die Datei selbst bleibt unverändert."""
-    nachweis = HaftpflichtNachweis.query.get_or_404(nachweis_id)
+    nachweis = Nachweis.query.get_or_404(nachweis_id)
     if request.method == 'POST':
         fehler = _nachweis_angaben(nachweis)
         if fehler:
@@ -417,13 +495,16 @@ def nachweis_bearbeiten(nachweis_id):
         else:
             db.session.commit()
             flash('Angaben zum Nachweis aktualisiert.', 'success')
-            return redirect(url_for('haftpflicht', hund_id=nachweis.hund_id))
+            return redirect(url_for('hund_nachweise', hund_id=nachweis.hund_id, art=nachweis.art))
     vorschlag = {
         'gueltig_bis': nachweis.gueltig_bis, 'ausgestellt_am': nachweis.ausgestellt_am,
-        'versicherer': nachweis.versicherer, 'vertragsnummer': nachweis.vertragsnummer,
-        'tier': nachweis.tier_laut_nachweis, 'chipnummer': nachweis.chipnummer,
+        'eingereicht_von': nachweis.eingereicht_von, 'aussteller': nachweis.aussteller,
+        'nummer': nachweis.nummer, 'tier': nachweis.tier_laut_nachweis,
+        'chipnummer': nachweis.chipnummer, 'bemerkung': nachweis.bemerkung,
+        'impfungen_liste': [i.strip() for i in (nachweis.impfungen or '').split(',') if i.strip()],
     }
-    return render_template('haftpflicht_angaben.html', hund=nachweis.hund, nachweis=nachweis,
+    return render_template('nachweis_angaben.html', hund=nachweis.hund, nachweis=nachweis, art=nachweis.art,
+                           art_info=NACHWEIS_ARTEN[nachweis.art], impfungen_auswahl=[n for n, _ in IMPFUNGEN],
                            vorschlag=vorschlag, warnungen=[], sha256=nachweis.datei_sha256,
                            endung=nachweis.datei_endung, original_name=nachweis.original_name,
                            text_erkannt=False)
@@ -431,7 +512,7 @@ def nachweis_bearbeiten(nachweis_id):
 
 @app.route('/nachweis/<int:nachweis_id>/datei')
 def nachweis_datei(nachweis_id):
-    nachweis = HaftpflichtNachweis.query.get_or_404(nachweis_id)
+    nachweis = Nachweis.query.get_or_404(nachweis_id)
     return _sende_nachweis(nachweis.datei_sha256, nachweis.datei_endung, nachweis.original_name)
 
 
@@ -449,7 +530,34 @@ def _sende_nachweis(sha256, endung, original_name):
     if not os.path.exists(datei_pfad):
         return 'Die Datei fehlt - bitte unter "Sicherungen" einen Stand wiederherstellen.', 404
     return send_file(datei_pfad, mimetype=nachweise.mimetype(endung),
-                     download_name=original_name or f'haftpflicht-nachweis.{endung}')
+                     download_name=original_name or f'nachweis.{endung}')
+
+
+@app.route('/nachweise')
+def nachweise_uebersicht():
+    """Historie aller Nachweise - und welche bald erneuert werden müssen."""
+    art = request.args.get('art', '')
+    abfrage = Nachweis.query.join(Hund).join(Person)
+    if art in NACHWEIS_ARTEN:
+        abfrage = abfrage.filter(Nachweis.art == art)
+    else:
+        art = ''
+    alle = abfrage.order_by(Nachweis.hochgeladen_am.desc()).all()
+
+    # Bald fällig: nur der jeweils aktuelle Nachweis je Hund und Art zählt -
+    # wer schon einen neueren eingereicht hat, muss nicht erinnert werden
+    heute = date.today()
+    aktuellste = {}
+    for n in alle:
+        if n.gueltig_bis and n.hund.besitzer.aktiv:
+            schluessel = (n.hund_id, n.art)
+            if schluessel not in aktuellste or n.gueltig_bis > aktuellste[schluessel].gueltig_bis:
+                aktuellste[schluessel] = n
+    erneuern = sorted((n for n in aktuellste.values() if n.erinnern_ab <= heute),
+                      key=lambda n: n.gueltig_bis)
+
+    return render_template('nachweise.html', nachweise=alle, erneuern=erneuern, art=art,
+                           arten=NACHWEIS_ARTEN, heute=heute, vorlauf_wochen=6)
 
 
 def parse_datum(datum_string):
@@ -793,12 +901,43 @@ def migriere_datenbank():
             print(f'Datenbank aktualisiert: Spalte {tabelle.name}.{spalte.name} ergänzt')
 
     db.create_all()
+    _haftpflicht_nachweise_uebernehmen(gesichert)
+
+
+def _haftpflicht_nachweise_uebernehmen(schon_gesichert):
+    """5.1.1/5.1.2 hatten eine eigene Tabelle haftpflicht_nachweis - in die gemeinsame
+    Ablage 'nachweis' übernehmen. Die alte Tabelle bleibt zur Sicherheit unverändert stehen."""
+    if 'haftpflicht_nachweis' not in inspect(db.engine).get_table_names():
+        return
+    with db.engine.connect() as v:
+        alt = v.execute(text('SELECT COUNT(*) FROM haftpflicht_nachweis')).scalar()
+        schon = v.execute(text("SELECT COUNT(*) FROM nachweis WHERE art = 'haftpflicht'")).scalar()
+    if alt == 0 or schon > 0:
+        return  # nichts zu tun oder bereits übernommen
+    if not schon_gesichert:
+        backup.erstelle_backup('vor-migration', LAUFENDE_VERSION, mit_code=False)
+    with db.engine.begin() as v:  # alles oder nichts
+        v.execute(text('''
+            INSERT INTO nachweis (hund_id, art, datei_sha256, datei_endung, original_name,
+                                  hochgeladen_am, eingereicht_von, aussteller, nummer,
+                                  ausgestellt_am, gueltig_bis, tier_laut_nachweis, chipnummer)
+            SELECT h.hund_id, 'haftpflicht', h.datei_sha256, h.datei_endung, h.original_name,
+                   h.hochgeladen_am, p.vorname || ' ' || p.nachname, h.versicherer, h.vertragsnummer,
+                   h.ausgestellt_am, h.gueltig_bis, h.tier_laut_nachweis, h.chipnummer
+            FROM haftpflicht_nachweis h
+            JOIN hund ON hund.id = h.hund_id
+            JOIN person p ON p.id = hund.person_id
+            ORDER BY h.id'''))
+        neu = v.execute(text("SELECT COUNT(*) FROM nachweis WHERE art = 'haftpflicht'")).scalar()
+        if neu != alt:
+            raise RuntimeError(f'Übernahme der Haftpflicht-Nachweise unvollständig ({neu} von {alt})')
+    print(f'Datenbank aktualisiert: {alt} Haftpflicht-Nachweis(e) in die Nachweis-Ablage übernommen')
 
 
 def selbsttest():
     """Lädt die wichtigsten Seiten einmal intern - fällt etwas um, gilt das Update als fehlgeschlagen."""
     with app.test_client() as client:
-        for pfad in ('/', '/?ansicht=handlungsbedarf', '/?ansicht=alle', '/sicherungen', '/export/excel'):
+        for pfad in ('/', '/?ansicht=handlungsbedarf', '/?ansicht=alle', '/nachweise', '/sicherungen', '/export/excel'):
             antwort = client.get(pfad)
             if antwort.status_code != 200:
                 raise RuntimeError(f'Selbsttest: {pfad} liefert {antwort.status_code}')

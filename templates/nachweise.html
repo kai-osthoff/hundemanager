@@ -1,0 +1,88 @@
+<!-- templates/nachweise.html - Historie aller Nachweise und was bald erneuert werden muss -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="leiste">
+    <h2>Nachweise</h2>
+    <nav class="filter" aria-label="Art des Nachweises">
+        <a href="{{ url_for('nachweise_uebersicht') }}" {% if not art %}aria-current="page"{% endif %}>Alle</a>
+        {% for schluessel, info in arten.items() %}
+        <a href="{{ url_for('nachweise_uebersicht', art=schluessel) }}" {% if schluessel == art %}aria-current="page"{% endif %}>{{ info.name }}</a>
+        {% endfor %}
+    </nav>
+</div>
+
+<section aria-label="Bald erneuern" style="margin-bottom: 28px;">
+    <h3 style="margin-bottom: 6px;">Neuen Nachweis anfordern</h3>
+    <p style="color: #55625A; font-size: 0.9rem; margin-bottom: 12px;">
+        Aktive Halter, deren aktueller Nachweis in den nächsten {{ vorlauf_wochen }} Wochen ausläuft oder schon abgelaufen ist.
+    </p>
+    {% if erneuern %}
+    <div class="table-container" style="margin-bottom: 0;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Läuft ab</th>
+                    <th>Art</th>
+                    <th>Hund</th>
+                    <th>Halter</th>
+                    <th>Quelle</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for n in erneuern %}
+                <tr>
+                    <td><span class="status-cell status-{{ n.status }}">{{ n.gueltig_bis|format_datum }}</span>
+                        <div style="font-size: 0.8rem; color: #55625A;">{% if n.gueltig_bis < heute %}seit {{ (heute - n.gueltig_bis).days }} Tagen abgelaufen{% else %}in {{ (n.gueltig_bis - heute).days }} Tagen{% endif %}</div></td>
+                    <td>{{ n.art_name }}</td>
+                    <td><a href="{{ url_for('hund_nachweise', hund_id=n.hund.id, art=n.art) }}">{{ n.hund.name }}</a></td>
+                    <td>{{ n.hund.besitzer.vollstaendiger_name }}</td>
+                    <td>{{ n.aussteller or '-' }}</td>
+                    <td><a href="{{ url_for('hund_nachweise', hund_id=n.hund.id, art=n.art) }}" class="knopf">Neuen hochladen</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="kein-hund">Gerade muss niemand einen neuen Nachweis einreichen.</div>
+    {% endif %}
+</section>
+
+<section aria-label="Historie">
+    <h3 style="margin-bottom: 12px;">Historie – alle eingereichten Nachweise ({{ nachweise|length }})</h3>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Hochgeladen</th>
+                    <th>Art</th>
+                    <th>Hund</th>
+                    <th>Eingereicht von</th>
+                    <th>Quelle</th>
+                    <th>Nummer / Impfungen</th>
+                    <th>Gültig bis</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for n in nachweise %}
+                <tr>
+                    <td>{{ n.hochgeladen_am.strftime('%d.%m.%Y') }}</td>
+                    <td>{{ n.art_name }}</td>
+                    <td><a href="{{ url_for('hund_nachweise', hund_id=n.hund.id, art=n.art) }}">{{ n.hund.name }}</a></td>
+                    <td>{{ n.eingereicht_von or '-' }}</td>
+                    <td>{{ n.aussteller or '-' }}</td>
+                    <td>{{ n.nummer or n.impfungen or '-' }}</td>
+                    <td>{% if n.gueltig_bis %}<span class="status-cell status-{{ n.status }}">{{ n.gueltig_bis|format_datum }}</span>{% else %}-{% endif %}</td>
+                    <td><a href="{{ url_for('nachweis_datei', nachweis_id=n.id) }}" target="_blank" class="knopf">Ansehen</a></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" style="color: #55625A; font-style: italic;">Noch keine Nachweise hinterlegt</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

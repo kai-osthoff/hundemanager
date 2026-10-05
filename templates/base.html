@@ -21,6 +21,9 @@
             line-height: 1.5;
         }
         
+        a { color: #173B2C; }
+        a:hover { color: #0F2A1F; }
+        
         .container {
             max-width: 1240px;
             margin: 0 auto;
@@ -150,7 +153,7 @@
             background: white;
             border-radius: 12px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-            overflow: hidden;
+            overflow-x: auto;  /* breite Tabellen scrollen, statt abgeschnitten zu werden */
             margin-bottom: 30px;
         }
         
@@ -299,6 +302,8 @@
         .person-actions {
             display: flex;
             gap: 8px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
         }
         
         /* Legende */
@@ -759,6 +764,7 @@
 
     <footer>
         <span>Version {{ app_version }}</span>
+        <a href="{{ url_for('nachweise_uebersicht') }}" class="link-button">Nachweise</a>
         <a href="{{ url_for('sicherungen') }}" class="link-button">Sicherungen</a>
         <form action="{{ url_for('update_pruefen') }}" method="POST">
             <button type="submit" class="link-button">Nach Updates suchen</button>

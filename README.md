@@ -85,6 +85,10 @@ kannst du selbst sichern oder einen älteren Stand zurückholen.
 Auf der Karte steht danach **„Haftpflicht bis …“** – grün, orange (läuft bald ab) oder rot (abgelaufen).
 Alle Nachweise bleiben dauerhaft gespeichert, auch abgelaufene, und sind in jeder Sicherung enthalten.
 
+Oben über **„Nachweise“** siehst du alle eingereichten Nachweise (wer, welche Quelle, gültig bis)
+und unter **„Neuen Nachweis anfordern“**, bei wem der Nachweis in den nächsten 6 Wochen ausläuft.
+Fotos vom **Impfpass** lädst du auf der Nachweis-Seite des Hundes unter „Impfpass“ hoch.
+
 ## Wenn etwas nicht klappt
 
 - **Der Hundemanager startet nicht oder Daten fehlen:** Schwarzes Fenster schließen, deinen Hundemanager-Ordner
