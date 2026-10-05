@@ -511,6 +511,21 @@
         .kennzahl-warn { background: #FFF1D6; color: #5C3800; }
         .kennzahl-alarm { background: #FBE3E1; color: #7A1A13; }
         .kennzahl-warn strong, .kennzahl-alarm strong { color: inherit; }
+        a.kennzahl {
+            display: block;
+            height: 100%;
+            text-decoration: none;
+            border: 2px solid transparent;
+            transition: border-color 0.1s;
+        }
+        a.kennzahl:hover { border-color: rgba(255, 255, 255, 0.5); }
+        a.kennzahl[aria-current] { border-color: #C6F06A; box-shadow: 0 0 0 2px #C6F06A; }
+        .filter-aus {
+            margin-left: 10px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #15201A;
+        }
 
         .leiste {
             display: flex;

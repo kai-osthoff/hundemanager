@@ -915,6 +915,35 @@ class HaftpflichtOberflaecheTests(unittest.TestCase):
         self.assertNotIn('Noch keine Einträge', seite)
         self.assertIn('Bello', self.oeffne('/?ansicht=alle').decode('utf-8'))
 
+    def test_kennzahl_kacheln_filtern(self):
+        heute = date.today()
+        with closing(sqlite3.connect(self.db)) as v:
+            v.execute('UPDATE hund SET gueltig_l = ? WHERE name = ?', ((heute - timedelta(days=1)).isoformat(), 'Rex'))
+            v.execute('UPDATE hund SET gueltig_t = ? WHERE name = ?', ((heute + timedelta(days=10)).isoformat(), 'Luna'))
+            v.commit()
+
+        def hunde(seite):
+            return {n for n in ('Bello', 'Luna', 'Rex', 'Fiete') if f'aria-label="{n}"' in seite}
+
+        seite = self.oeffne('/').decode('utf-8')
+        self.assertIn('href="/?filter=abgelaufen"', seite)
+        self.assertEqual(hunde(seite), {'Bello', 'Luna', 'Rex', 'Fiete'})
+
+        seite = self.oeffne('/?filter=abgelaufen').decode('utf-8')
+        self.assertEqual(hunde(seite), {'Rex'})
+        # Aktive Kachel führt zurück zur ungefilterten Liste
+        self.assertRegex(seite, r'<a href="/"\s+class="kennzahl[^"]*" aria-current="true" title="Filter aufheben"')
+        self.assertEqual(hunde(self.oeffne('/?filter=bald').decode('utf-8')), {'Luna'})
+        self.assertEqual(hunde(self.oeffne('/?filter=haftpflicht').decode('utf-8')), {'Bello', 'Luna', 'Rex', 'Fiete'})
+        self.assertEqual(hunde(self.oeffne('/?filter=foto').decode('utf-8')), {'Bello', 'Luna', 'Rex', 'Fiete'})
+        self.assertEqual(hunde(self.oeffne('/?filter=quatsch').decode('utf-8')), {'Bello', 'Luna', 'Rex', 'Fiete'})
+
+        # Pausierte Halter fallen raus, wie bei den Kennzahlen
+        self.oeffne('/person/2/toggle_aktiv', b'')
+        seite = self.oeffne('/?filter=abgelaufen').decode('utf-8')
+        self.assertEqual(hunde(seite), set())
+        self.assertIn('Nichts gefunden', seite)
+
     def nachweis_speichern(self, art, datei, dateiname, felder):
         koerper, typ = multipart('datei', dateiname, datei)
         # Art steckt im Upload-Formular als eigenes Feld

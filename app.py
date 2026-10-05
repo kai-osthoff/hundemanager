@@ -395,12 +395,26 @@ def fehlende_angaben(hund, impfungen, haftpflicht, nachweis):
     return punkte
 
 
+# Filter über die Kennzahl-Kacheln: gelten wie die Kennzahlen nur für aktive Halter
+KENNZAHL_FILTER = {
+    'bald': lambda p, h: any(i['status'] == 'bald-ablaufend' for i in h['impfungen']),
+    'abgelaufen': lambda p, h: any(i['status'] == 'abgelaufen' for i in h['impfungen']),
+    'haftpflicht': lambda p, h: h['haftpflicht'] not in ('gueltig', 'bald-ablaufend'),
+    'foto': lambda p, h: p.foto_status in ('fehlt', 'ohne-nachweis'),
+}
+
+
 @app.route('/')
 def index():
     ansicht = request.args.get('ansicht', 'aktiv')
     if request.args.get('all') == '1':  # alte Links aus v5.1.1 und früher
         ansicht = 'alle'
     if ansicht not in ('aktiv', 'handlungsbedarf', 'alle'):
+        ansicht = 'aktiv'
+    filter_ = request.args.get('filter')
+    if filter_ not in KENNZAHL_FILTER:
+        filter_ = None
+    if filter_:
         ansicht = 'aktiv'
 
     alle_personen = Person.query.order_by(
@@ -418,6 +432,10 @@ def index():
             hunde = [h for h in hunde if h['gesamt'] != 'ok']
             if not hunde:
                 continue
+        if filter_:
+            hunde = [h for h in hunde if KENNZAHL_FILTER[filter_](person, h)]
+            if not hunde and not (filter_ == 'foto' and KENNZAHL_FILTER['foto'](person, None)):
+                continue
         gruppen.append({'person': person, 'hunde': hunde})
 
     # Kennzahlen immer über die aktiven Halter
@@ -432,8 +450,8 @@ def index():
         'ohne_fotoeinwilligung': sum(1 for p in aktive if p.foto_status in ('fehlt', 'ohne-nachweis')),
     }
 
-    return render_template('index.html', gruppen=gruppen, ansicht=ansicht,
-                           pausierte=pausierte if ansicht != 'alle' else [],
+    return render_template('index.html', gruppen=gruppen, ansicht=ansicht, filter=filter_,
+                           pausierte=pausierte if ansicht != 'alle' and not filter_ else [],
                            anzahl_pausiert=len(pausierte), kennzahlen=kennzahlen,
                            gibt_personen=bool(alle_personen))
 

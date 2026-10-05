@@ -10,20 +10,30 @@
 {% endblock %}
 
 {% block kopf_inhalt %}
-<ul class="kennzahlen" aria-label="Kennzahlen">
-    <li class="kennzahl"><strong>{{ kennzahlen.hunde }}</strong>aktive {{ 'Hund' if kennzahlen.hunde == 1 else 'Hunde' }}</li>
-    <li class="kennzahl {{ 'kennzahl-warn' if kennzahlen.bald }}"><strong>{{ kennzahlen.bald }}</strong>{{ 'Impfung läuft' if kennzahlen.bald == 1 else 'Impfungen laufen' }} in &lt; 1 Monat ab</li>
-    <li class="kennzahl {{ 'kennzahl-alarm' if kennzahlen.abgelaufen }}"><strong>{{ kennzahlen.abgelaufen }}</strong>{{ 'Impfung' if kennzahlen.abgelaufen == 1 else 'Impfungen' }} abgelaufen</li>
-    <li class="kennzahl {{ 'kennzahl-warn' if kennzahlen.ohne_haftpflicht }}"><strong>{{ kennzahlen.ohne_haftpflicht }}</strong>ohne gültigen Haftpflicht-Nachweis</li>
-    <li class="kennzahl {{ 'kennzahl-warn' if kennzahlen.ohne_fotoeinwilligung }}"><strong>{{ kennzahlen.ohne_fotoeinwilligung }}</strong>Halter ohne unterschriebene Fotoeinwilligung</li>
+{# Jede Kachel filtert die Liste, ein zweiter Klick hebt den Filter wieder auf #}
+{% macro kachel(schluessel, wert, klasse, text) %}
+<li><a href="{{ url_for('index') if filter == schluessel else url_for('index', filter=schluessel) }}"
+       class="kennzahl {{ klasse }}" {% if filter == schluessel %}aria-current="true" title="Filter aufheben"{% else %}title="Nur diese anzeigen"{% endif %}><strong>{{ wert }}</strong>{{ text }}</a></li>
+{% endmacro %}
+<ul class="kennzahlen" aria-label="Kennzahlen – zum Filtern anklicken">
+    <li><a href="{{ url_for('index') }}" class="kennzahl" {% if not filter and ansicht == 'aktiv' %}aria-current="true"{% endif %} title="Alle aktiven Hunde anzeigen"><strong>{{ kennzahlen.hunde }}</strong>aktive {{ 'Hund' if kennzahlen.hunde == 1 else 'Hunde' }}</a></li>
+    {{ kachel('bald', kennzahlen.bald, 'kennzahl-warn' if kennzahlen.bald, ('Impfung läuft' if kennzahlen.bald == 1 else 'Impfungen laufen') ~ ' in < 1 Monat ab') }}
+    {{ kachel('abgelaufen', kennzahlen.abgelaufen, 'kennzahl-alarm' if kennzahlen.abgelaufen, ('Impfung' if kennzahlen.abgelaufen == 1 else 'Impfungen') ~ ' abgelaufen') }}
+    {{ kachel('haftpflicht', kennzahlen.ohne_haftpflicht, 'kennzahl-warn' if kennzahlen.ohne_haftpflicht, 'ohne gültigen Haftpflicht-Nachweis') }}
+    {{ kachel('foto', kennzahlen.ohne_fotoeinwilligung, 'kennzahl-warn' if kennzahlen.ohne_fotoeinwilligung, 'Halter ohne unterschriebene Fotoeinwilligung') }}
 </ul>
 {% endblock %}
 
 {% block content %}
 <div class="leiste">
+    {% if filter %}
+    <h2>{{ {'bald': 'Impfung läuft bald ab', 'abgelaufen': 'Impfung abgelaufen', 'haftpflicht': 'Ohne gültigen Haftpflicht-Nachweis', 'foto': 'Ohne unterschriebene Fotoeinwilligung'}[filter] }}
+        <a href="{{ url_for('index') }}" class="filter-aus" title="Filter aufheben">✕ Filter aufheben</a></h2>
+    {% else %}
     <h2>{{ {'aktiv': 'Alle aktiven Hunde', 'handlungsbedarf': 'Handlungsbedarf', 'alle': 'Alle Hunde'}[ansicht] }}</h2>
+    {% endif %}
     <nav class="filter" aria-label="Filter">
-        <a href="{{ url_for('index') }}" {% if ansicht == 'aktiv' %}aria-current="page"{% endif %}>Aktiv</a>
+        <a href="{{ url_for('index') }}" {% if ansicht == 'aktiv' and not filter %}aria-current="page"{% endif %}>Aktiv</a>
         <a href="{{ url_for('index', ansicht='handlungsbedarf') }}" {% if ansicht == 'handlungsbedarf' %}aria-current="page"{% endif %}>Handlungsbedarf ({{ kennzahlen.handlungsbedarf }})</a>
         <a href="{{ url_for('index', ansicht='alle') }}" {% if ansicht == 'alle' %}aria-current="page"{% endif %}>Alle</a>
     </nav>
@@ -132,6 +142,9 @@
     {% if not gibt_personen %}
         <h3 style="margin-bottom: 8px;">Noch keine Einträge</h3>
         <p>Mit „+ Neue Person“ oben legst du den ersten Halter an.</p>
+    {% elif filter %}
+        <h3 style="margin-bottom: 8px;">Nichts gefunden</h3>
+        <p>Bei keinem aktiven Hund trifft das gerade zu. <a href="{{ url_for('index') }}">Filter aufheben</a></p>
     {% elif ansicht == 'handlungsbedarf' %}
         <h3 style="margin-bottom: 8px;">Alles in Ordnung</h3>
         <p>Bei keinem aktiven Hund ist gerade etwas zu tun.</p>
