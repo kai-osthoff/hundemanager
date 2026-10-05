@@ -30,18 +30,40 @@
         {% else %}
             <p><span class="badge badge-danger">Kein Nachweis</span></p>
         {% endif %}
+    {% elif arten[gewaehlte_art].impfungen %}
+        <dl class="impf-grid" style="grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); margin-bottom: 12px;">
+            {% for i in ansicht.impfungen %}
+            <div class="impf impf-{{ i.status }}">
+                <dt>{{ i.name }}{% if i.hinweis %} · {{ i.hinweis }}{% endif %}</dt>
+                <dd>{{ 'gültig bis ' ~ i.datum|format_datum if i.datum else 'nicht eingetragen' }}</dd>
+            </div>
+            {% endfor %}
+        </dl>
+        {% if ansicht.impf_nachfrage %}
+            <a href="{{ ansicht.impf_nachfrage }}" target="whatsapp" rel="noopener" class="wa-zeile" style="margin-bottom: 8px;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1.4-4.2A8 8 0 1 1 8.3 20.7z"/><path d="M9 10h6M9 13.5h4"/></svg>
+                <span>Foto vom Impfpass per WhatsApp bei {{ hund.besitzer.vorname }} anfragen</span>
+            </a>
+        {% elif ansicht.impfungen|selectattr('status', 'in', ['abgelaufen', 'bald-ablaufend', 'keine-angabe'])|list %}
+            <div class="wa-zeile wa-ohne-nummer" style="margin-bottom: 8px;">
+                <span>Für eine WhatsApp-Nachfrage fehlt die Handynummer.</span>
+                <a href="{{ url_for('person_bearbeiten', person_id=hund.besitzer.id) }}">Nummer eintragen</a>
+            </div>
+        {% endif %}
     {% endif %}
 
     <h3 style="margin-top: 22px;">Neuen {{ arten[gewaehlte_art].name }}-Nachweis hochladen</h3>
     <p style="color: #55625A; font-size: 0.9rem; margin-bottom: 10px;">
         {% if gewaehlte_art == 'haftpflicht' %}PDF der Versicherung oder ein Foto. Bei PDFs werden die Angaben automatisch erkannt.
-        {% else %}Foto der Impfpass-Seite (JPG/PNG) oder ein PDF.{% endif %}
+        {% else %}Fotos der Impfpass-Seiten (JPG/PNG) oder ein PDF – mehrere Seiten auf einmal auswählen.
+        Quer oder auf dem Kopf fotografierte Seiten werden automatisch gedreht. Danach trägst du ein, bis wann die Impfungen gelten.{% endif %}
     </p>
     <form action="{{ url_for('nachweis_hochladen', hund_id=hund.id) }}" method="POST" enctype="multipart/form-data">
         <input type="hidden" name="art" value="{{ gewaehlte_art }}">
         <div class="form-group">
-            <label for="datei">Datei</label>
-            <input type="file" id="datei" name="datei" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required>
+            <label for="datei">{{ 'Fotos / Datei' if arten[gewaehlte_art].impfungen else 'Datei' }}</label>
+            <input type="file" id="datei" name="datei" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required
+                   {% if arten[gewaehlte_art].impfungen %}multiple{% endif %}>
         </div>
         <button type="submit" class="btn btn-primary">Hochladen</button>
     </form>
@@ -54,7 +76,7 @@
                 <th>Gültig bis</th>
                 <th>Eingereicht von</th>
                 <th>Quelle</th>
-                <th>{{ 'Vertragsnummer' if gewaehlte_art == 'haftpflicht' else 'Impfungen' }}</th>
+                <th>{{ 'Vertragsnummer' if gewaehlte_art == 'haftpflicht' else 'Impfungen (gültig bis)' }}</th>
                 <th>Ausgestellt</th>
                 <th>Hochgeladen</th>
                 <th></th>
@@ -65,13 +87,18 @@
             <tr>
                 <td>{% if n.gueltig_bis %}<span class="status-cell status-{{ n.status }}">{{ n.gueltig_bis|format_datum }}</span>{% else %}-{% endif %}</td>
                 <td>{{ n.eingereicht_von or '-' }}</td>
-                <td>{{ n.aussteller or '-' }}<div style="font-size: 0.8rem; color: #55625A;">{{ n.original_name or '' }}</div></td>
-                <td>{{ (n.nummer if gewaehlte_art == 'haftpflicht' else n.impfungen) or '-' }}</td>
+                <td>{{ n.aussteller or '-' }}<div style="font-size: 0.8rem; color: #55625A;">{{ n.original_name or '' }}{% if n.weitere_seiten %} · {{ n.seiten|length }} Seiten{% endif %}</div></td>
+                <td>
+                    {% if gewaehlte_art == 'haftpflicht' %}{{ n.nummer or '-' }}
+                    {% elif n.impf_daten %}
+                        {% for name, feld in impf_namen if feld in n.impf_daten %}<div>{{ name }}: {{ n.impf_daten[feld]|format_datum }}</div>{% endfor %}
+                    {% else %}{{ n.impfungen or '-' }}{% endif %}
+                </td>
                 <td>{{ n.ausgestellt_am|format_datum }}</td>
                 <td>{{ n.hochgeladen_am.strftime('%d.%m.%Y %H:%M') }}</td>
                 <td>
                     <div class="person-actions">
-                        <a href="{{ url_for('nachweis_datei', nachweis_id=n.id) }}" target="_blank" class="knopf">Ansehen</a>
+                        <a href="{{ url_for('nachweis_ansehen', nachweis_id=n.id) }}" target="_blank" class="knopf">Ansehen</a>
                         <a href="{{ url_for('nachweis_bearbeiten', nachweis_id=n.id) }}" class="knopf">Korrigieren</a>
                     </div>
                 </td>

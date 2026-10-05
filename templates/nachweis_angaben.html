@@ -1,85 +1,195 @@
-<!-- templates/nachweis_angaben.html - Angaben zu einem Nachweis prüfen oder korrigieren -->
+<!-- templates/nachweis_angaben.html - Angaben zu einem Nachweis prüfen oder eintragen, die Fotos daneben -->
 {% extends "base.html" %}
 
 {% block content %}
-<div class="form-container">
-    <h2>{{ art_info.name }}-Nachweis {{ 'korrigieren' if nachweis else 'prüfen und speichern' }}</h2>
+<style>
+    .pruefen { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(320px, 1fr); gap: 24px; align-items: start; }
+    @media (max-width: 980px) { .pruefen { grid-template-columns: minmax(0, 1fr); } }
+    .pruefen-bilder { position: sticky; top: 12px; display: flex; flex-direction: column; gap: 16px; }
+    @media (max-width: 980px) { .pruefen-bilder { position: static; } }
+    .seite { background: #F3F7F2; border-radius: 14px; padding: 10px; }
+    .seite-kopf { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; font-size: 0.85rem; color: #55625A; }
+    .seite-kopf strong { color: #15201A; }
+    .seite-kopf .rechts { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+    .bild-rahmen { max-height: 78vh; overflow: auto; border-radius: 10px; background: #FFFFFF; cursor: zoom-in; }
+    .bild-rahmen img { display: block; width: 100%; height: auto; }
+    .bild-rahmen.gross { cursor: zoom-out; }
+    .bild-rahmen.gross img { width: 220%; max-width: none; }
+    .pdf-vorschau { width: 100%; height: 78vh; border: 0; border-radius: 10px; background: #FFFFFF; }
+    .gedreht-hinweis { color: #1B5E36; }
+    .impf-eintragen { border: 0; margin-bottom: 20px; }
+    .impf-eintragen legend { font-weight: 700; margin-bottom: 4px; }
+    .impf-zeile { display: grid; grid-template-columns: minmax(0, 1fr) 170px; gap: 6px 12px; align-items: center;
+                  padding: 12px 0; border-top: 1px solid #E4E8E5; }
+    .impf-zeile label { margin: 0; }
+    .impf-zeile label small { display: block; font-weight: 400; font-size: 0.8rem; color: #55625A; }
+    .impf-zeile input { padding: 8px 10px; }
+    .impf-zeile .bisher { grid-column: 1 / -1; font-size: 0.8rem; color: #55625A; }
+    .impf-zeile .bisher .status-cell { padding: 2px 8px; font-size: 0.8rem; }
+    .impf-zeile .warnung { grid-column: 1 / -1; font-size: 0.85rem; color: #7A1A13; font-weight: 600; }
+    .hilfe { color: #55625A; font-size: 0.85rem; margin-bottom: 8px; }
+</style>
+
+<div class="form-container" style="max-width: 1320px;">
+    <h2>{{ art_info.name }}-Nachweis {{ 'korrigieren' if nachweis else ('eintragen' if art_info.impfungen else 'prüfen und speichern') }}</h2>
     <p style="color: #55625A; margin-bottom: 15px;">
         Hund: <strong>{{ hund.name }}</strong> ({{ hund.besitzer.vollstaendiger_name }})
-    </p>
-
-    <p style="margin-bottom: 15px;">
-        <a href="{{ url_for('nachweis_vorschau', sha256=sha256, endung=endung) }}" target="_blank" class="knopf">Dokument ansehen</a>
     </p>
 
     {% if text_erkannt %}
         <div class="flash success">Angaben wurden aus dem Dokument erkannt – bitte kurz prüfen.</div>
     {% elif not nachweis %}
-        <div class="flash" style="background: #E4E8E5;">Bitte die Angaben aus dem Dokument eintragen.</div>
+        <div class="flash" style="background: #E4E8E5;">
+            {% if art_info.impfungen %}Bitte auf den Fotos nachsehen, bis wann die Impfungen gelten, und die Daten rechts eintragen.
+            {% else %}Bitte die Angaben aus dem Dokument eintragen.{% endif %}
+        </div>
     {% endif %}
     {% for w in warnungen %}
         <div class="flash error">⚠ {{ w }}</div>
     {% endfor %}
 
-    <form method="POST" action="{{ url_for('nachweis_bearbeiten', nachweis_id=nachweis.id) if nachweis else url_for('nachweis_speichern', hund_id=hund.id) }}">
+    <form method="POST" id="angaben" action="{{ url_for('nachweis_bearbeiten', nachweis_id=nachweis.id) if nachweis else url_for('nachweis_speichern', hund_id=hund.id) }}">
         <input type="hidden" name="art" value="{{ art }}">
-        <input type="hidden" name="sha256" value="{{ sha256 }}">
-        <input type="hidden" name="endung" value="{{ endung }}">
-        <input type="hidden" name="original_name" value="{{ original_name or '' }}">
+        <div class="pruefen">
+            <section class="pruefen-bilder" aria-label="Eingereichte Dateien">
+                {% for seite in seiten %}
+                {% set datei_url = url_for('nachweis_vorschau', sha256=seite.sha256, endung=seite.endung) %}
+                <figure class="seite" id="seite-{{ loop.index }}">
+                    <input type="hidden" name="sha256" value="{{ seite.sha256 }}">
+                    <input type="hidden" name="endung" value="{{ seite.endung }}">
+                    <input type="hidden" name="original_name" value="{{ seite.original_name or '' }}">
+                    <input type="hidden" name="drehung" value="{{ seite.drehung }}">
+                    <figcaption class="seite-kopf">
+                        <strong>{% if seiten|length > 1 %}Seite {{ loop.index }} von {{ seiten|length }}{% else %}Dokument{% endif %}</strong>
+                        <span>{{ seite.original_name or '' }}</span>
+                        {% if seite.drehung and not nachweis %}<span class="gedreht-hinweis">· automatisch gedreht</span>{% endif %}
+                        <span class="rechts">
+                            {% if seite.endung != 'pdf' %}
+                            <button type="button" class="knopf" data-drehen="-90" title="Nach links drehen" aria-label="Seite {{ loop.index }} nach links drehen">↺</button>
+                            <button type="button" class="knopf" data-drehen="90" title="Nach rechts drehen" aria-label="Seite {{ loop.index }} nach rechts drehen">↻</button>
+                            {% endif %}
+                            <a href="{{ datei_url }}" target="_blank" class="knopf">Original</a>
+                        </span>
+                    </figcaption>
+                    {% if seite.endung == 'pdf' %}
+                        <iframe class="pdf-vorschau" src="{{ datei_url }}" title="Dokument {{ loop.index }}"></iframe>
+                    {% else %}
+                        <div class="bild-rahmen" title="Klicken zum Vergrößern">
+                            <img src="{{ url_for('nachweis_bild', sha256=seite.sha256, endung=seite.endung, drehung=seite.drehung) }}"
+                                 data-basis="{{ url_for('nachweis_bild', sha256=seite.sha256, endung=seite.endung) }}"
+                                 alt="Seite {{ loop.index }} des Nachweises">
+                        </div>
+                    {% endif %}
+                </figure>
+                {% endfor %}
+            </section>
 
-        <div class="form-group">
-            <label for="gueltig_bis" {% if art_info.gueltig_pflicht %}class="required"{% endif %}>Gültig bis</label>
-            <input type="date" id="gueltig_bis" name="gueltig_bis" value="{{ vorschlag.get('gueltig_bis')|iso_datum }}" {% if art_info.gueltig_pflicht %}required{% endif %}>
-        </div>
-        <div class="form-group">
-            <label for="ausgestellt_am">Ausgestellt am</label>
-            <input type="date" id="ausgestellt_am" name="ausgestellt_am" value="{{ vorschlag.get('ausgestellt_am')|iso_datum }}">
-        </div>
-        <div class="form-group">
-            <label for="eingereicht_von">Eingereicht von</label>
-            <input type="text" id="eingereicht_von" name="eingereicht_von" value="{{ vorschlag.get('eingereicht_von') or '' }}">
-        </div>
-        <div class="form-group">
-            <label for="aussteller">Quelle: {{ art_info.aussteller }}</label>
-            <input type="text" id="aussteller" name="aussteller" value="{{ vorschlag.get('aussteller') or vorschlag.get('versicherer') or '' }}">
-        </div>
-        {% if art_info.nummer %}
-        <div class="form-group">
-            <label for="nummer">{{ art_info.nummer }}</label>
-            <input type="text" id="nummer" name="nummer" value="{{ vorschlag.get('nummer') or vorschlag.get('vertragsnummer') or '' }}">
-        </div>
-        {% endif %}
-        {% if art_info.tierdaten %}
-        <div class="form-group">
-            <label for="tier_laut_nachweis">Tier laut Nachweis</label>
-            <input type="text" id="tier_laut_nachweis" name="tier_laut_nachweis" value="{{ vorschlag.get('tier') or vorschlag.get('tier_laut_nachweis') or '' }}">
-        </div>
-        <div class="form-group">
-            <label for="chipnummer">Chipnummer</label>
-            <input type="text" id="chipnummer" name="chipnummer" value="{{ vorschlag.get('chipnummer') or '' }}">
-        </div>
-        {% endif %}
-        {% if art_info.impfungen %}
-        <fieldset class="form-group" style="border: 0;">
-            <legend style="font-weight: 500; margin-bottom: 6px;">Belegte Impfungen</legend>
-            <div style="display: flex; gap: 18px; flex-wrap: wrap;">
-            {% for name in impfungen_auswahl %}
-                <label style="display: flex; align-items: center; gap: 6px; min-height: 44px;">
-                    <input type="checkbox" name="impfungen" value="{{ name }}" style="width: auto;" {% if name in vorschlag.get('impfungen_liste', []) %}checked{% endif %}> {{ name }}
-                </label>
-            {% endfor %}
-            </div>
-        </fieldset>
-        {% endif %}
-        <div class="form-group">
-            <label for="bemerkung">Bemerkung</label>
-            <textarea id="bemerkung" name="bemerkung" style="min-height: 70px;">{{ vorschlag.get('bemerkung') or '' }}</textarea>
-        </div>
+            <section aria-label="Angaben">
+                {% if art_info.impfungen %}
+                <fieldset class="impf-eintragen">
+                    <legend>Impfungen laut Impfpass – gültig bis</legend>
+                    <p class="hilfe">
+                        Je Impfung steht im Pass das Impfdatum und darunter, bis wann sie gilt
+                        (Tollwut: letzte Zeile „gültig bis / valid until“). Nur eintragen, was auf den Fotos zu sehen ist –
+                        leere Felder bleiben beim Hund unverändert.
+                    </p>
+                    {% for i in impfungen %}
+                    <div class="impf-zeile">
+                        <label for="impf_{{ i.feld }}"><strong>{{ i.name }}</strong><small>{{ i.erkennen }}</small></label>
+                        <input type="date" id="impf_{{ i.feld }}" name="impf_{{ i.feld }}" min="2000-01-01"
+                               value="{{ vorschlag.get('impf_' ~ i.feld)|iso_datum }}" data-ablauf>
+                        <div class="bisher">Beim Hund eingetragen:
+                            {% if i.datum %}<span class="status-cell status-{{ i.status }}">{{ i.datum|format_datum }}{% if i.hinweis %} · {{ i.hinweis }}{% endif %}</span>
+                            {% else %}<span class="status-cell status-keine-angabe">nichts</span>{% endif %}
+                        </div>
+                        <div class="warnung" hidden>Laut Impfpass schon abgelaufen – nach dem Speichern per WhatsApp nachfragen.</div>
+                    </div>
+                    {% endfor %}
+                    {# Ältere Nachweise hatten nur Häkchen ohne Datum - die bleiben erhalten #}
+                    {% for name in vorschlag.get('impfungen_liste', []) %}
+                        {% if name in impfungen_auswahl %}<input type="hidden" name="impfungen" value="{{ name }}">{% endif %}
+                    {% endfor %}
+                </fieldset>
+                {% else %}
+                <div class="form-group">
+                    <label for="gueltig_bis" {% if art_info.gueltig_pflicht %}class="required"{% endif %}>Gültig bis</label>
+                    <input type="date" id="gueltig_bis" name="gueltig_bis" value="{{ vorschlag.get('gueltig_bis')|iso_datum }}" {% if art_info.gueltig_pflicht %}required{% endif %}>
+                </div>
+                {% endif %}
+                <div class="form-group">
+                    <label for="ausgestellt_am">{{ art_info.ausgestellt }}</label>
+                    <input type="date" id="ausgestellt_am" name="ausgestellt_am" value="{{ vorschlag.get('ausgestellt_am')|iso_datum }}">
+                </div>
+                <div class="form-group">
+                    <label for="eingereicht_von">Eingereicht von</label>
+                    <input type="text" id="eingereicht_von" name="eingereicht_von" value="{{ vorschlag.get('eingereicht_von') or '' }}">
+                </div>
+                <div class="form-group">
+                    <label for="aussteller">Quelle: {{ art_info.aussteller }}</label>
+                    <input type="text" id="aussteller" name="aussteller" value="{{ vorschlag.get('aussteller') or vorschlag.get('versicherer') or '' }}">
+                </div>
+                {% if art_info.nummer %}
+                <div class="form-group">
+                    <label for="nummer">{{ art_info.nummer }}</label>
+                    <input type="text" id="nummer" name="nummer" value="{{ vorschlag.get('nummer') or vorschlag.get('vertragsnummer') or '' }}">
+                </div>
+                {% endif %}
+                {% if art_info.tierdaten %}
+                <div class="form-group">
+                    <label for="tier_laut_nachweis">Tier laut Nachweis</label>
+                    <input type="text" id="tier_laut_nachweis" name="tier_laut_nachweis" value="{{ vorschlag.get('tier') or vorschlag.get('tier_laut_nachweis') or '' }}">
+                </div>
+                <div class="form-group">
+                    <label for="chipnummer">Chipnummer</label>
+                    <input type="text" id="chipnummer" name="chipnummer" value="{{ vorschlag.get('chipnummer') or '' }}">
+                </div>
+                {% endif %}
+                <div class="form-group">
+                    <label for="bemerkung">Bemerkung</label>
+                    <textarea id="bemerkung" name="bemerkung" style="min-height: 70px;">{{ vorschlag.get('bemerkung') or '' }}</textarea>
+                </div>
 
-        <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Speichern</button>
-            <a href="{{ url_for('hund_nachweise', hund_id=hund.id, art=art) }}" class="btn btn-secondary">Abbrechen</a>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Speichern</button>
+                    <a href="{{ url_for('hund_nachweise', hund_id=hund.id, art=art) }}" class="btn btn-secondary">Abbrechen</a>
+                </div>
+            </section>
         </div>
     </form>
 </div>
+
+<script>
+    // Drehen: nur die Anzeige (Feld "drehung" wird mitgespeichert), die Datei bleibt unverändert
+    document.querySelectorAll('[data-drehen]').forEach(function (knopf) {
+        knopf.addEventListener('click', function () {
+            var seite = knopf.closest('.seite');
+            var feld = seite.querySelector('input[name=drehung]');
+            var neu = (((parseInt(feld.value, 10) || 0) + parseInt(knopf.dataset.drehen, 10)) % 360 + 360) % 360;
+            feld.value = neu;
+            var bild = seite.querySelector('img');
+            if (bild) bild.src = bild.dataset.basis + '?drehung=' + neu;
+        });
+    });
+    // Vergrößern zum Lesen der Handschrift
+    document.querySelectorAll('.bild-rahmen').forEach(function (rahmen) {
+        rahmen.addEventListener('click', function (e) {
+            var gross = rahmen.classList.toggle('gross');
+            if (gross) {
+                // Ungefähr dorthin scrollen, wo geklickt wurde
+                var r = rahmen.getBoundingClientRect();
+                rahmen.scrollLeft = (e.clientX - r.left) / r.width * rahmen.scrollWidth - r.width / 2;
+                rahmen.scrollTop = (e.clientY - r.top) / r.height * rahmen.scrollHeight - r.height / 2;
+            }
+        });
+    });
+    // Sofort sehen, wenn ein eingetragenes Datum schon abgelaufen ist
+    var heute = '{{ heute }}';
+    document.querySelectorAll('[data-ablauf]').forEach(function (feld) {
+        var pruefen = function () {
+            feld.closest('.impf-zeile').querySelector('.warnung').hidden = !(feld.value && feld.value < heute);
+        };
+        feld.addEventListener('input', pruefen);
+        pruefen();
+    });
+</script>
 {% endblock %}

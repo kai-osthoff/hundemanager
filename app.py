@@ -17,6 +17,7 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from sqlalchemy import func, inspect, text #NEU
 import backup
+import bilder
 import nachweise
 import updater
 import whatsapp
@@ -27,7 +28,8 @@ app.config['SECRET_KEY'] = secrets.token_hex(32)
 os.makedirs(backup.INSTANCE_DIR, exist_ok=True)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + backup.DB_PFAD
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['MAX_CONTENT_LENGTH'] = nachweise.MAX_GROESSE + 1024 * 1024
+# Mehrere Fotos auf einmal (z.B. alle Seiten des Impfpasses) - je Datei gilt MAX_GROESSE
+app.config['MAX_CONTENT_LENGTH'] = 4 * nachweise.MAX_GROESSE + 1024 * 1024
 
 db = SQLAlchemy(app)
 
@@ -113,6 +115,7 @@ NACHWEIS_ARTEN = {
         'name': 'Haftpflicht',
         'aussteller': 'Versicherer',
         'nummer': 'Vertragsnummer',
+        'ausgestellt': 'Ausgestellt am',
         'gueltig_pflicht': True,     # ohne Gültigkeit kein Haftpflicht-Nachweis
         'tierdaten': True,           # Tier und Chip laut Dokument
         'impfungen': False,
@@ -121,9 +124,10 @@ NACHWEIS_ARTEN = {
         'name': 'Impfpass',
         'aussteller': 'Tierarzt / Praxis',
         'nummer': None,
+        'ausgestellt': 'Letzte Impfung am (optional)',
         'gueltig_pflicht': False,
         'tierdaten': False,
-        'impfungen': True,           # welche Impfungen das Foto belegt
+        'impfungen': True,           # je Impfung "gültig bis" - wird beim Hund eingetragen
     },
 }
 # So lange vor Ablauf soll später an einen neuen Nachweis erinnert werden
@@ -147,7 +151,38 @@ class Nachweis(db.Model):
     tier_laut_nachweis = db.Column(db.String(100), nullable=True)
     chipnummer = db.Column(db.String(30), nullable=True)
     impfungen = db.Column(db.String(100), nullable=True)         # z.B. "SHP/DAP/DHP, L"
+    # Impfpass: je Impfung "gültig bis" laut Pass, als JSON {"gueltig_l": "2027-12-05", ...}
+    impf_gueltig = db.Column(db.Text, nullable=True)
     bemerkung = db.Column(db.Text, nullable=True)
+    # Anzeige-Drehung der Datei in Grad (im Uhrzeigersinn) - die Datei selbst bleibt unverändert
+    drehung = db.Column(db.Integer, nullable=True, default=0)
+    # Weitere Fotos desselben Nachweises (z.B. mehrere Impfpass-Seiten); die erste Datei steht oben
+    weitere_seiten = db.relationship('NachweisSeite', backref='nachweis', lazy=True,
+                                     cascade='all, delete-orphan', order_by='NachweisSeite.nr')
+
+    @property
+    def seiten(self):
+        """Alle Dateien des Nachweises in Reihenfolge - die erste ist der Nachweis selbst."""
+        erste = {'sha256': self.datei_sha256, 'endung': self.datei_endung,
+                 'original_name': self.original_name, 'drehung': self.drehung or 0}
+        return [erste] + [{'sha256': s.datei_sha256, 'endung': s.datei_endung,
+                           'original_name': s.original_name, 'drehung': s.drehung or 0}
+                          for s in self.weitere_seiten]
+
+    @property
+    def impf_daten(self):
+        """{feld: date} aus impf_gueltig - kaputte Einträge werden übergangen."""
+        try:
+            roh = json.loads(self.impf_gueltig or '{}')
+        except ValueError:
+            return {}
+        daten = {}
+        for feld, wert in roh.items():
+            try:
+                daten[feld] = date.fromisoformat(wert)
+            except (TypeError, ValueError):
+                continue
+        return daten
 
     @property
     def art_name(self):
@@ -160,6 +195,17 @@ class Nachweis(db.Model):
     @property
     def erinnern_ab(self):
         return self.gueltig_bis - ERINNERUNG_VORLAUF if self.gueltig_bis else None
+
+
+class NachweisSeite(db.Model):
+    """Zweite, dritte ... Datei eines Nachweises (z.B. Tollwut-Seite und Impfseite des Passes)."""
+    id = db.Column(db.Integer, primary_key=True)
+    nachweis_id = db.Column(db.Integer, db.ForeignKey('nachweis.id'), nullable=False)
+    nr = db.Column(db.Integer, nullable=False)           # 2, 3, ... (1 ist der Nachweis selbst)
+    datei_sha256 = db.Column(db.String(64), nullable=False)
+    datei_endung = db.Column(db.String(4), nullable=False)
+    original_name = db.Column(db.String(255), nullable=True)
+    drehung = db.Column(db.Integer, nullable=True, default=0)
 
 
 class Fotoeinwilligung(db.Model):
@@ -240,6 +286,17 @@ IMPFUNGEN = [
     ('BbPi', 'gueltig_bbpi'),
     ('T', 'gueltig_t'),
 ]
+# Woran Saskia die Impfung im Impfpass erkennt (Aufkleber des Impfstoffs)
+IMPF_ERKENNEN = {
+    'gueltig_shp_dap_dhp': 'Staupe, Hepatitis, Parvovirose – Aufkleber z. B. Nobivac SHP, DHPPi, '
+                           'Eurican DAPPi, Versican DHPPi',
+    'gueltig_l': 'Leptospirose – Aufkleber z. B. Nobivac L4, Versican L4, Eurican L4',
+    'gueltig_bbpi': 'Zwingerhusten – Aufkleber z. B. Nobivac BbPi / KC',
+    'gueltig_t': 'Tollwut (Rabies) – eigene Seite im EU-Heimtierausweis, Aufkleber z. B. Nobivac T, '
+                 'Rabisin, Rabikal',
+}
+# Ein "gültig bis" weiter in der Zukunft ist sicher ein Tippfehler (Tollwut: bis zu 3 Jahre)
+IMPF_HOECHSTENS = relativedelta(years=5)
 GESAMT_TEXT = {
     'ok': 'Alles gültig',
     'bald': 'Bald fällig',
@@ -261,7 +318,8 @@ def hund_ansicht(hund):
         elif status == 'bald-ablaufend':
             tage = (datum - heute).days
             hinweis = 'heute' if tage == 0 else ('morgen' if tage == 1 else f'in {tage} Tagen')
-        impfungen.append({'name': name, 'datum': datum, 'status': status, 'hinweis': hinweis})
+        impfungen.append({'name': name, 'feld': feld, 'datum': datum, 'status': status, 'hinweis': hinweis,
+                          'erkennen': IMPF_ERKENNEN[feld]})
 
     nachweis = hund.aktueller_nachweis
     if nachweis:
@@ -296,11 +354,12 @@ def hund_ansicht(hund):
         'gesamt_text': GESAMT_TEXT[gesamt],
         'nachfragen': nachfragen,
         'whatsapp_nachfrage': whatsapp_nachfrage,
+        'impf_nachfrage': impf_nachfrage(hund, impfungen),
     }
 
 
-def fehlende_angaben(hund, impfungen, haftpflicht, nachweis):
-    """Was beim Halter nachzufragen ist - je Punkt eine kurze Zeile für die Nachricht."""
+def impf_punkte(impfungen):
+    """Fehlende, abgelaufene und bald fällige Impfungen - je Punkt eine Zeile für die Nachricht."""
     punkte = []
     for i in impfungen:
         if i['status'] == 'keine-angabe':
@@ -309,6 +368,22 @@ def fehlende_angaben(hund, impfungen, haftpflicht, nachweis):
             punkte.append(f'Impfung {i["name"]}: abgelaufen am {format_datum(i["datum"])}')
         elif i['status'] == 'bald-ablaufend':
             punkte.append(f'Impfung {i["name"]}: läuft am {format_datum(i["datum"])} ab')
+    return punkte
+
+
+def impf_nachfrage(hund, impfungen):
+    """WhatsApp-Link: Bitte um ein Foto der Impfpass-Seite - None, wenn alles gültig ist
+    oder die Handynummer fehlt."""
+    punkte = impf_punkte(impfungen)
+    if not punkte:
+        return None
+    return whatsapp.link(hund.besitzer.mobil, whatsapp.impfpass_nachricht(
+        hund.besitzer.vorname, hund.name, punkte))
+
+
+def fehlende_angaben(hund, impfungen, haftpflicht, nachweis):
+    """Was beim Halter nachzufragen ist - je Punkt eine kurze Zeile für die Nachricht."""
+    punkte = impf_punkte(impfungen)
     if haftpflicht in ('keine-angabe', 'ohne-nachweis'):
         punkte.append('Haftpflicht: Versicherungsnachweis fehlt noch')
     elif haftpflicht == 'abgelaufen':
@@ -493,7 +568,7 @@ def hund_loeschen(hund_id):
 
 @app.errorhandler(413)
 def datei_zu_gross(_fehler):
-    flash('Die Datei ist zu groß (maximal 25 MB).', 'error')
+    flash('Die Datei ist zu groß (maximal 25 MB je Datei, 100 MB zusammen).', 'error')
     return redirect(request.referrer or url_for('index'))
 
 
@@ -507,8 +582,20 @@ def haftpflicht(hund_id):
 def hund_nachweise(hund_id):
     hund = Hund.query.get_or_404(hund_id)
     art = request.args.get('art', 'haftpflicht')
-    return render_template('hund_nachweise.html', hund=hund, arten=NACHWEIS_ARTEN,
-                           gewaehlte_art=art if art in NACHWEIS_ARTEN else 'haftpflicht')
+    return render_template('hund_nachweise.html', hund=hund, arten=NACHWEIS_ARTEN, ansicht=hund_ansicht(hund),
+                           impf_namen=IMPFUNGEN, gewaehlte_art=art if art in NACHWEIS_ARTEN else 'haftpflicht')
+
+
+MAX_DATEIEN = 10  # je Upload - ein Impfpass hat selten mehr beschriebene Seiten
+
+
+def _angaben_seite(hund, nachweis, art, vorschlag, seiten, warnungen=(), text_erkannt=False):
+    """Dialog zum Prüfen/Eintragen der Angaben - mit den Fotos daneben."""
+    return render_template('nachweis_angaben.html', hund=hund, nachweis=nachweis, art=art,
+                           art_info=NACHWEIS_ARTEN[art], impfungen_auswahl=[n for n, _ in IMPFUNGEN],
+                           impfungen=hund_ansicht(hund)['impfungen'], vorschlag=vorschlag,
+                           warnungen=list(warnungen), seiten=seiten, text_erkannt=text_erkannt,
+                           heute=date.today().isoformat())
 
 
 @app.route('/hund/<int:hund_id>/nachweise/hochladen', methods=['POST'])
@@ -518,23 +605,36 @@ def nachweis_hochladen(hund_id):
     art = request.form.get('art', 'haftpflicht')
     if art not in NACHWEIS_ARTEN:
         art = 'haftpflicht'
-    datei = request.files.get('datei')
-    if not datei or not datei.filename:
+    dateien = [d for d in request.files.getlist('datei') if d and d.filename]
+    if not dateien:
         flash('Bitte eine Datei auswählen.', 'error')
         return redirect(url_for('hund_nachweise', hund_id=hund.id, art=art))
-
-    daten = datei.read()
-    try:
-        sha256, endung = nachweise.speichern(daten)
-    except nachweise.NachweisFehler as e:
-        flash(str(e), 'error')
+    if len(dateien) > MAX_DATEIEN:
+        flash(f'Bitte höchstens {MAX_DATEIEN} Dateien auf einmal hochladen.', 'error')
         return redirect(url_for('hund_nachweise', hund_id=hund.id, art=art))
+
+    seiten, erste_daten = [], None
+    for datei in dateien:
+        daten = datei.read()
+        name = os.path.basename(datei.filename)[:255]
+        try:
+            sha256, endung = nachweise.speichern(daten)
+        except nachweise.NachweisFehler as e:
+            flash(f'{name}: {e}' if len(dateien) > 1 else str(e), 'error')
+            return redirect(url_for('hund_nachweise', hund_id=hund.id, art=art))
+        if any(s['sha256'] == sha256 for s in seiten):
+            continue  # dieselbe Datei doppelt ausgewählt
+        if erste_daten is None:
+            erste_daten = daten
+        # Quer oder auf dem Kopf fotografiert? Nur die Anzeige wird gedreht, nie die Datei
+        drehung = 0 if endung == 'pdf' else bilder.ausrichtung_erkennen(daten)
+        seiten.append({'sha256': sha256, 'endung': endung, 'original_name': name, 'drehung': drehung})
 
     vorschlag = {'eingereicht_von': hund.besitzer.vollstaendiger_name}
     warnungen = []
     erkannt = False
-    if art == 'haftpflicht' and endung == 'pdf':
-        erkannt_daten = nachweise.angaben_vorschlagen(nachweise.pdf_text(daten))
+    if art == 'haftpflicht' and seiten[0]['endung'] == 'pdf':
+        erkannt_daten = nachweise.angaben_vorschlagen(nachweise.pdf_text(erste_daten))
         erkannt = bool(erkannt_daten)
         vorschlag.update(erkannt_daten)
         tier = vorschlag.get('tier')
@@ -543,17 +643,53 @@ def nachweis_hochladen(hund_id):
     gueltig_bis = vorschlag.get('gueltig_bis')
     if gueltig_bis and gueltig_bis < date.today():
         warnungen.append('Laut Dokument ist dieser Nachweis bereits abgelaufen.')
+    return _angaben_seite(hund, None, art, vorschlag, seiten, warnungen, erkannt)
 
-    return render_template('nachweis_angaben.html', hund=hund, nachweis=None, art=art,
-                           art_info=NACHWEIS_ARTEN[art], impfungen_auswahl=[n for n, _ in IMPFUNGEN],
-                           vorschlag=vorschlag, warnungen=warnungen, sha256=sha256, endung=endung,
-                           original_name=os.path.basename(datei.filename)[:255], text_erkannt=erkannt)
+
+def _seiten_aus_formular():
+    """Die hochgeladenen Dateien aus den versteckten Feldern des Dialogs - jede muss abgelegt sein."""
+    namen = request.form.getlist('original_name')
+    drehungen = request.form.getlist('drehung')
+    seiten = []
+    for i, (sha256, endung) in enumerate(zip(request.form.getlist('sha256'), request.form.getlist('endung'))):
+        if not os.path.exists(nachweise.pfad(sha256, endung)):
+            raise nachweise.NachweisFehler('Die hochgeladene Datei wurde nicht gefunden.')
+        seiten.append({'sha256': sha256, 'endung': endung,
+                       'original_name': (namen[i] if i < len(namen) else '')[:255] or None,
+                       'drehung': bilder.drehung_pruefen(drehungen[i] if i < len(drehungen) else 0)})
+    if not seiten:
+        raise nachweise.NachweisFehler('Die hochgeladene Datei wurde nicht gefunden.')
+    return seiten
+
+
+def _impf_angaben():
+    """Je Impfung das "gültig bis" aus dem Formular -> ({feld: date}, Fehlermeldung oder None)."""
+    daten = {}
+    grenze = date.today() + IMPF_HOECHSTENS
+    for name, feld in IMPFUNGEN:
+        wert = request.form.get(f'impf_{feld}', '').strip()
+        if not wert:
+            continue
+        datum = parse_datum(wert)
+        if not datum or datum.year < 2000 or datum > grenze:
+            return None, (f'Impfung {name}: „{format_datum(datum) if datum else wert}“ kann nicht stimmen '
+                          f'– bitte das Datum im Impfpass noch einmal prüfen.')
+        daten[feld] = datum
+    return daten, None
 
 
 def _nachweis_angaben(nachweis):
-    """Übernimmt die Formularfelder. Gibt eine Fehlermeldung zurück oder None."""
+    """Übernimmt die Formularfelder. Gibt eine Fehlermeldung zurück oder None (dann ist nichts geändert)."""
     art_info = NACHWEIS_ARTEN[nachweis.art]
     gueltig_bis = parse_datum(request.form.get('gueltig_bis'))
+    impf = {}
+    if art_info['impfungen']:
+        impf, fehler = _impf_angaben()
+        if fehler:
+            return fehler
+        if impf:
+            # Der Impfpass muss erneuert werden, sobald die erste Impfung abläuft
+            gueltig_bis = min(impf.values())
     if art_info['gueltig_pflicht'] and not gueltig_bis:
         return 'Bitte angeben, bis wann der Nachweis gültig ist.'
     nachweis.gueltig_bis = gueltig_bis
@@ -563,10 +699,47 @@ def _nachweis_angaben(nachweis):
     nachweis.nummer = request.form.get('nummer', '').strip()[:100] or None
     nachweis.tier_laut_nachweis = request.form.get('tier_laut_nachweis', '').strip()[:100] or None
     nachweis.chipnummer = request.form.get('chipnummer', '').strip()[:30] or None
-    gueltige = [n for n, _ in IMPFUNGEN]
-    nachweis.impfungen = ', '.join(i for i in request.form.getlist('impfungen') if i in gueltige) or None
+    angehakt = request.form.getlist('impfungen')  # ältere Formulare: nur Häkchen, ohne Datum
+    nachweis.impfungen = ', '.join(n for n, f in IMPFUNGEN if f in impf or n in angehakt) or None
+    nachweis.impf_gueltig = json.dumps({f: d.isoformat() for f, d in impf.items()}) if impf else None
     nachweis.bemerkung = request.form.get('bemerkung', '').strip() or None
     return None
+
+
+def impfungen_uebernehmen(hund, neu, vorher=None):
+    """Trägt die Daten aus dem Impfpass beim Hund ein. Ein späteres Datum gewinnt: ein altes Foto
+    überschreibt keine neuere Impfung. Ausnahme: Korrektur eines Nachweises (vorher = dessen alte
+    Angaben) - was von ihm stammt, wird auch auf ein früheres Datum korrigiert.
+    Gibt (übernommen, nicht übernommen) als lesbare Zeilen zurück."""
+    vorher = vorher or {}
+    uebernommen, behalten = [], []
+    for name, feld in IMPFUNGEN:
+        datum = neu.get(feld)
+        if not datum:
+            continue
+        aktuell = getattr(hund, feld)
+        if aktuell is None or datum >= aktuell or aktuell == vorher.get(feld):
+            setattr(hund, feld, datum)
+            uebernommen.append(f'{name} bis {format_datum(datum)}')
+        else:
+            behalten.append(f'{name} (eingetragen ist schon {format_datum(aktuell)})')
+    return uebernommen, behalten
+
+
+def _impf_meldung(uebernommen, behalten):
+    meldung = ''
+    if uebernommen:
+        meldung += ' Beim Hund eingetragen: ' + ', '.join(uebernommen) + '.'
+    if behalten:
+        meldung += ' Nicht übernommen, weil schon ein späteres Datum eingetragen ist: ' + ', '.join(behalten) + '.'
+    return meldung
+
+
+def _formular_vorschlag():
+    """Eingaben zurück ins Formular, wenn etwas nicht stimmt - nichts geht verloren."""
+    vorschlag = request.form.to_dict()
+    vorschlag['impfungen_liste'] = request.form.getlist('impfungen')
+    return vorschlag
 
 
 @app.route('/hund/<int:hund_id>/nachweise/speichern', methods=['POST'])
@@ -576,45 +749,55 @@ def nachweis_speichern(hund_id):
     art = request.form.get('art', 'haftpflicht')
     if art not in NACHWEIS_ARTEN:
         art = 'haftpflicht'
-    sha256 = request.form.get('sha256', '')
-    endung = request.form.get('endung', '')
     try:
-        if not os.path.exists(nachweise.pfad(sha256, endung)):
-            raise nachweise.NachweisFehler('Die hochgeladene Datei wurde nicht gefunden.')
+        seiten = _seiten_aus_formular()
     except nachweise.NachweisFehler as e:
         flash(f'{e} Bitte erneut hochladen.', 'error')
         return redirect(url_for('hund_nachweise', hund_id=hund.id, art=art))
 
-    nachweis = Nachweis(hund_id=hund.id, art=art, datei_sha256=sha256, datei_endung=endung,
-                        original_name=request.form.get('original_name', '')[:255] or None)
+    erste = seiten[0]
+    nachweis = Nachweis(hund_id=hund.id, art=art, datei_sha256=erste['sha256'], datei_endung=erste['endung'],
+                        original_name=erste['original_name'], drehung=erste['drehung'])
+    for nr, seite in enumerate(seiten[1:], start=2):
+        nachweis.weitere_seiten.append(NachweisSeite(
+            nr=nr, datei_sha256=seite['sha256'], datei_endung=seite['endung'],
+            original_name=seite['original_name'], drehung=seite['drehung']))
     fehler = _nachweis_angaben(nachweis)
     if fehler:
         flash(fehler, 'error')
-        vorschlag = request.form.to_dict()
-        vorschlag['impfungen_liste'] = request.form.getlist('impfungen')
-        return render_template('nachweis_angaben.html', hund=hund, nachweis=None, art=art,
-                               art_info=NACHWEIS_ARTEN[art], impfungen_auswahl=[n for n, _ in IMPFUNGEN],
-                               vorschlag=vorschlag, warnungen=[], sha256=sha256, endung=endung,
-                               original_name=nachweis.original_name, text_erkannt=False)
+        return _angaben_seite(hund, None, art, _formular_vorschlag(), seiten)
     db.session.add(nachweis)
+    meldung = ''
+    if NACHWEIS_ARTEN[art]['impfungen']:
+        meldung = _impf_meldung(*impfungen_uebernehmen(hund, nachweis.impf_daten))
     db.session.commit()
     gueltig = f' (gültig bis {format_datum(nachweis.gueltig_bis)})' if nachweis.gueltig_bis else ''
-    flash(f'{nachweis.art_name}-Nachweis für {hund.name} gespeichert{gueltig}.', 'success')
+    flash(f'{nachweis.art_name}-Nachweis für {hund.name} gespeichert{gueltig}.{meldung}', 'success')
     return redirect(url_for('hund_nachweise', hund_id=hund.id, art=art))
 
 
 @app.route('/nachweis/<int:nachweis_id>/bearbeiten', methods=['GET', 'POST'])
 def nachweis_bearbeiten(nachweis_id):
-    """Angaben korrigieren - die Datei selbst bleibt unverändert."""
+    """Angaben korrigieren und Fotos drehen - die Dateien selbst bleiben unverändert."""
     nachweis = Nachweis.query.get_or_404(nachweis_id)
     if request.method == 'POST':
+        vorher = nachweis.impf_daten
         fehler = _nachweis_angaben(nachweis)
         if fehler:
+            db.session.rollback()
             flash(fehler, 'error')
-        else:
-            db.session.commit()
-            flash('Angaben zum Nachweis aktualisiert.', 'success')
-            return redirect(url_for('hund_nachweise', hund_id=nachweis.hund_id, art=nachweis.art))
+            seiten = nachweis.seiten
+            for seite, wert in zip(seiten, request.form.getlist('drehung')):
+                seite['drehung'] = bilder.drehung_pruefen(wert)
+            return _angaben_seite(nachweis.hund, nachweis, nachweis.art, _formular_vorschlag(), seiten)
+        for teil, wert in zip([nachweis] + list(nachweis.weitere_seiten), request.form.getlist('drehung')):
+            teil.drehung = bilder.drehung_pruefen(wert)
+        meldung = ''
+        if NACHWEIS_ARTEN[nachweis.art]['impfungen']:
+            meldung = _impf_meldung(*impfungen_uebernehmen(nachweis.hund, nachweis.impf_daten, vorher))
+        db.session.commit()
+        flash(f'Angaben zum Nachweis aktualisiert.{meldung}', 'success')
+        return redirect(url_for('hund_nachweise', hund_id=nachweis.hund_id, art=nachweis.art))
     vorschlag = {
         'gueltig_bis': nachweis.gueltig_bis, 'ausgestellt_am': nachweis.ausgestellt_am,
         'eingereicht_von': nachweis.eingereicht_von, 'aussteller': nachweis.aussteller,
@@ -622,11 +805,30 @@ def nachweis_bearbeiten(nachweis_id):
         'chipnummer': nachweis.chipnummer, 'bemerkung': nachweis.bemerkung,
         'impfungen_liste': [i.strip() for i in (nachweis.impfungen or '').split(',') if i.strip()],
     }
-    return render_template('nachweis_angaben.html', hund=nachweis.hund, nachweis=nachweis, art=nachweis.art,
-                           art_info=NACHWEIS_ARTEN[nachweis.art], impfungen_auswahl=[n for n, _ in IMPFUNGEN],
-                           vorschlag=vorschlag, warnungen=[], sha256=nachweis.datei_sha256,
-                           endung=nachweis.datei_endung, original_name=nachweis.original_name,
-                           text_erkannt=False)
+    vorschlag.update({f'impf_{feld}': datum for feld, datum in nachweis.impf_daten.items()})
+    return _angaben_seite(nachweis.hund, nachweis, nachweis.art, vorschlag, nachweis.seiten)
+
+
+@app.route('/nachweis/<int:nachweis_id>/ansehen')
+def nachweis_ansehen(nachweis_id):
+    """Alle Seiten eines Nachweises richtig herum - mit Drehknöpfen und Link zum Original."""
+    nachweis = Nachweis.query.get_or_404(nachweis_id)
+    return render_template('nachweis_ansehen.html', nachweis=nachweis, hund=nachweis.hund)
+
+
+@app.route('/nachweis/<int:nachweis_id>/drehen', methods=['POST'])
+def nachweis_drehen(nachweis_id):
+    """Eine Seite um 90 Grad weiterdrehen - gespeichert wird nur die Anzeige-Drehung."""
+    nachweis = Nachweis.query.get_or_404(nachweis_id)
+    teile = [nachweis] + list(nachweis.weitere_seiten)
+    try:
+        teil = teile[int(request.form.get('seite', 0))]
+    except (ValueError, IndexError):
+        return redirect(url_for('nachweis_ansehen', nachweis_id=nachweis.id))
+    schritt = -90 if request.form.get('richtung') == 'links' else 90
+    teil.drehung = bilder.drehung_pruefen((teil.drehung or 0) + schritt)
+    db.session.commit()
+    return redirect(url_for('nachweis_ansehen', nachweis_id=nachweis.id) + f'#seite-{teile.index(teil) + 1}')
 
 
 @app.route('/nachweis/<int:nachweis_id>/datei')
@@ -637,7 +839,25 @@ def nachweis_datei(nachweis_id):
 
 @app.route('/nachweis/vorschau/<sha256>.<endung>')
 def nachweis_vorschau(sha256, endung):
-    """Gerade hochgeladene Datei ansehen, bevor die Angaben gespeichert sind."""
+    """Originaldatei ansehen, auch bevor die Angaben gespeichert sind."""
+    return _sende_nachweis(sha256, endung, None)
+
+
+@app.route('/nachweis/bild/<sha256>.<endung>')
+def nachweis_bild(sha256, endung):
+    """Foto richtig herum gedreht und in Bildschirmgröße. PDFs (und ohne Pillow) das Original."""
+    try:
+        datei_pfad = nachweise.pfad(sha256, endung)
+    except nachweise.NachweisFehler:
+        return 'Nicht gefunden', 404
+    if endung != 'pdf' and os.path.exists(datei_pfad):
+        with open(datei_pfad, 'rb') as f:
+            ergebnis = bilder.ansicht(f.read(), request.args.get('drehung', 0))
+        if ergebnis:
+            antwort = send_file(io.BytesIO(ergebnis[0]), mimetype=ergebnis[1])
+            # Inhalt und Drehung stecken in der Adresse - der Browser darf sich das Bild merken
+            antwort.headers['Cache-Control'] = 'private, max-age=86400'
+            return antwort
     return _sende_nachweis(sha256, endung, None)
 
 
@@ -652,6 +872,24 @@ def _sende_nachweis(sha256, endung, original_name):
                      download_name=original_name or f'nachweis.{endung}')
 
 
+def impfungen_faellig(personen, heute):
+    """Hunde aktiver Halter mit Impfungen, die abgelaufen sind oder innerhalb von
+    ERINNERUNG_VORLAUF ablaufen - früheste zuerst. Grundlage sind die Daten am Hund."""
+    grenze = heute + ERINNERUNG_VORLAUF
+    faellig = []
+    for person in personen:
+        if not person.aktiv:
+            continue
+        for hund in person.hunde:
+            ansicht = hund_ansicht(hund)
+            impfungen = [i for i in ansicht['impfungen'] if i['datum'] and i['datum'] <= grenze]
+            if impfungen:
+                faellig.append({'hund': hund, 'impfungen': impfungen,
+                                'frueheste': min(i['datum'] for i in impfungen),
+                                'whatsapp': ansicht['impf_nachfrage']})
+    return sorted(faellig, key=lambda f: (f['frueheste'], f['hund'].name.lower()))
+
+
 @app.route('/nachweise')
 def nachweise_uebersicht():
     """Historie aller Nachweise - und welche bald erneuert werden müssen."""
@@ -664,19 +902,21 @@ def nachweise_uebersicht():
     alle = abfrage.order_by(Nachweis.hochgeladen_am.desc()).all()
 
     # Bald fällig: nur der jeweils aktuelle Nachweis je Hund und Art zählt -
-    # wer schon einen neueren eingereicht hat, muss nicht erinnert werden
+    # wer schon einen neueren eingereicht hat, muss nicht erinnert werden.
+    # Impfungen zählen einzeln (am Hund) - dafür gibt es eine eigene Liste.
     heute = date.today()
     aktuellste = {}
     for n in alle:
-        if n.gueltig_bis and n.hund.besitzer.aktiv:
+        if n.gueltig_bis and n.hund.besitzer.aktiv and not NACHWEIS_ARTEN.get(n.art, {}).get('impfungen'):
             schluessel = (n.hund_id, n.art)
             if schluessel not in aktuellste or n.gueltig_bis > aktuellste[schluessel].gueltig_bis:
                 aktuellste[schluessel] = n
     erneuern = sorted((n for n in aktuellste.values() if n.erinnern_ab <= heute),
                       key=lambda n: n.gueltig_bis)
+    impf_faellig = impfungen_faellig(Person.query.all(), heute) if art in ('', 'impfpass') else []
 
-    return render_template('nachweise.html', nachweise=alle, erneuern=erneuern, art=art,
-                           arten=NACHWEIS_ARTEN, heute=heute, vorlauf_wochen=6)
+    return render_template('nachweise.html', nachweise=alle, erneuern=erneuern, impf_faellig=impf_faellig,
+                           art=art, arten=NACHWEIS_ARTEN, heute=heute, vorlauf_wochen=6)
 
 
 # --- Fotoeinwilligung (je Halter) ---

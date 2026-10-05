@@ -1,0 +1,58 @@
+<!-- templates/nachweis_ansehen.html - alle Seiten eines Nachweises richtig herum ansehen -->
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .seiten { display: flex; flex-direction: column; gap: 18px; }
+    .seite { background: #FFFFFF; border-radius: 14px; padding: 12px; }
+    .seite-kopf { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; font-size: 0.9rem; color: #55625A; }
+    .seite-kopf strong { color: #15201A; }
+    .seite-kopf .rechts { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+    .seite-kopf form { display: inline; }
+    .seite img { display: block; max-width: 100%; height: auto; margin: 0 auto; border-radius: 8px; }
+    .seite iframe { width: 100%; height: 85vh; border: 0; border-radius: 8px; }
+</style>
+
+<div class="leiste">
+    <a href="{{ url_for('hund_nachweise', hund_id=hund.id, art=nachweis.art) }}" class="knopf">← Nachweise von {{ hund.name }}</a>
+    <a href="{{ url_for('nachweis_bearbeiten', nachweis_id=nachweis.id) }}" class="knopf">Angaben korrigieren</a>
+</div>
+
+<h2 style="margin-bottom: 4px;">{{ nachweis.art_name }} – {{ hund.name }}</h2>
+<p style="color: #55625A; margin-bottom: 18px;">
+    Hochgeladen am {{ nachweis.hochgeladen_am.strftime('%d.%m.%Y') }}{% if nachweis.eingereicht_von %} · eingereicht von {{ nachweis.eingereicht_von }}{% endif %}
+    {% if nachweis.gueltig_bis %} · gültig bis <span class="status-cell status-{{ nachweis.status }}">{{ nachweis.gueltig_bis|format_datum }}</span>{% endif %}
+</p>
+
+<div class="seiten">
+    {% for seite in nachweis.seiten %}
+    {% set datei_url = url_for('nachweis_vorschau', sha256=seite.sha256, endung=seite.endung) %}
+    <figure class="seite" id="seite-{{ loop.index }}">
+        <figcaption class="seite-kopf">
+            <strong>{% if nachweis.seiten|length > 1 %}Seite {{ loop.index }} von {{ nachweis.seiten|length }}{% else %}Dokument{% endif %}</strong>
+            <span>{{ seite.original_name or '' }}</span>
+            <span class="rechts">
+                {% if seite.endung != 'pdf' %}
+                <form action="{{ url_for('nachweis_drehen', nachweis_id=nachweis.id) }}" method="POST">
+                    <input type="hidden" name="seite" value="{{ loop.index0 }}">
+                    <button type="submit" name="richtung" value="links" class="knopf" title="Nach links drehen" aria-label="Seite {{ loop.index }} nach links drehen">↺</button>
+                    <button type="submit" name="richtung" value="rechts" class="knopf" title="Nach rechts drehen" aria-label="Seite {{ loop.index }} nach rechts drehen">↻</button>
+                </form>
+                {% endif %}
+                <a href="{{ datei_url }}" target="_blank" class="knopf">Original</a>
+            </span>
+        </figcaption>
+        {% if seite.endung == 'pdf' %}
+            <iframe src="{{ datei_url }}" title="Dokument {{ loop.index }}"></iframe>
+        {% else %}
+            <a href="{{ url_for('nachweis_bild', sha256=seite.sha256, endung=seite.endung, drehung=seite.drehung) }}" target="_blank" title="In voller Größe öffnen">
+                <img src="{{ url_for('nachweis_bild', sha256=seite.sha256, endung=seite.endung, drehung=seite.drehung) }}" alt="Seite {{ loop.index }}">
+            </a>
+        {% endif %}
+    </figure>
+    {% endfor %}
+</div>
+<p style="text-align: center; color: #55625A; font-size: 0.85rem; margin-top: 16px;">
+    Gedreht wird nur die Anzeige – die eingereichte Datei bleibt unverändert erhalten.
+</p>
+{% endblock %}

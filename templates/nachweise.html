@@ -12,6 +12,57 @@
     </nav>
 </div>
 
+{% if art in ('', 'impfpass') %}
+<section aria-label="Impfungen fällig" style="margin-bottom: 28px;">
+    <h3 style="margin-bottom: 6px;">Impfungen abgelaufen oder bald fällig</h3>
+    <p style="color: #55625A; font-size: 0.9rem; margin-bottom: 12px;">
+        Aktive Halter, bei deren Hund eine Impfung in den nächsten {{ vorlauf_wochen }} Wochen abläuft oder schon abgelaufen ist.
+        Per WhatsApp um ein Foto vom Impfpass bitten, dann hier hochladen und die neuen Daten eintragen.
+    </p>
+    {% if impf_faellig %}
+    <div class="table-container" style="margin-bottom: 0;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Impfung</th>
+                    <th>Hund</th>
+                    <th>Halter</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for f in impf_faellig %}
+                <tr>
+                    <td>
+                        {% for i in f.impfungen %}
+                        <div style="margin: 2px 0;"><span class="status-cell status-{{ i.status }}">{{ i.name }} bis {{ i.datum|format_datum }}</span>
+                            <span style="font-size: 0.8rem; color: #55625A;">{% if i.datum < heute %}seit {{ (heute - i.datum).days }} Tagen abgelaufen{% else %}in {{ (i.datum - heute).days }} Tagen{% endif %}</span></div>
+                        {% endfor %}
+                    </td>
+                    <td><a href="{{ url_for('hund_nachweise', hund_id=f.hund.id, art='impfpass') }}">{{ f.hund.name }}</a></td>
+                    <td>{{ f.hund.besitzer.vollstaendiger_name }}</td>
+                    <td>
+                        <div class="person-actions">
+                            {% if f.whatsapp %}
+                            <a href="{{ f.whatsapp }}" target="whatsapp" rel="noopener" class="knopf knopf-whatsapp">WhatsApp-Nachfrage</a>
+                            {% else %}
+                            <a href="{{ url_for('person_bearbeiten', person_id=f.hund.besitzer.id) }}" class="knopf" title="Für WhatsApp fehlt die Handynummer">Handynummer fehlt</a>
+                            {% endif %}
+                            <a href="{{ url_for('hund_nachweise', hund_id=f.hund.id, art='impfpass') }}" class="knopf">Impfpass hochladen</a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="kein-hund">Gerade ist keine Impfung abgelaufen oder bald fällig.</div>
+    {% endif %}
+</section>
+{% endif %}
+
+{% if art != 'impfpass' %}
 <section aria-label="Bald erneuern" style="margin-bottom: 28px;">
     <h3 style="margin-bottom: 6px;">Neuen Nachweis anfordern</h3>
     <p style="color: #55625A; font-size: 0.9rem; margin-bottom: 12px;">
@@ -49,6 +100,7 @@
     <div class="kein-hund">Gerade muss niemand einen neuen Nachweis einreichen.</div>
     {% endif %}
 </section>
+{% endif %}
 
 <section aria-label="Historie">
     <h3 style="margin-bottom: 12px;">Historie – alle eingereichten Nachweise ({{ nachweise|length }})</h3>
@@ -74,9 +126,9 @@
                     <td><a href="{{ url_for('hund_nachweise', hund_id=n.hund.id, art=n.art) }}">{{ n.hund.name }}</a></td>
                     <td>{{ n.eingereicht_von or '-' }}</td>
                     <td>{{ n.aussteller or '-' }}</td>
-                    <td>{{ n.nummer or n.impfungen or '-' }}</td>
+                    <td>{{ n.nummer or n.impfungen or '-' }}{% if n.weitere_seiten %}<div style="font-size: 0.8rem; color: #55625A;">{{ n.seiten|length }} Seiten</div>{% endif %}</td>
                     <td>{% if n.gueltig_bis %}<span class="status-cell status-{{ n.status }}">{{ n.gueltig_bis|format_datum }}</span>{% else %}-{% endif %}</td>
-                    <td><a href="{{ url_for('nachweis_datei', nachweis_id=n.id) }}" target="_blank" class="knopf">Ansehen</a></td>
+                    <td><a href="{{ url_for('nachweis_ansehen', nachweis_id=n.id) }}" target="_blank" class="knopf">Ansehen</a></td>
                 </tr>
                 {% else %}
                 <tr><td colspan="8" style="color: #55625A; font-style: italic;">Noch keine Nachweise hinterlegt</td></tr>

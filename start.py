@@ -25,7 +25,7 @@ URL = f"http://127.0.0.1:{os.environ.get('HUNDEMANAGER_PORT', 5000)}"
 
 def pakete_vorhanden():
     try:
-        import flask, flask_sqlalchemy, dateutil, openpyxl, pypdf  # noqa: F401
+        import flask, flask_sqlalchemy, dateutil, openpyxl, pypdf, PIL  # noqa: F401
         return True
     except ImportError:
         return False

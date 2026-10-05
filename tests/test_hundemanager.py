@@ -7,6 +7,7 @@
 # Updates über einen nachgebauten GitHub-Server ein - echte Releases und der
 # echte Dokumente-Ordner werden nie angefasst.
 
+import hashlib
 import http.cookiejar
 import importlib.util
 import io
@@ -199,6 +200,48 @@ def multipart(feldname, dateiname, daten):
     koerper = (f'--{grenze}\r\nContent-Disposition: form-data; name="{feldname}"; filename="{dateiname}"\r\n'
                f'Content-Type: application/octet-stream\r\n\r\n').encode() + daten + f'\r\n--{grenze}--\r\n'.encode()
     return koerper, f'multipart/form-data; boundary={grenze}'
+
+
+def multipart_mehrere(felder, dateien):
+    """Formular mit mehreren Dateien: felder = [(name, wert)], dateien = [(name, dateiname, daten)]."""
+    grenze = 'hundemanagertestgrenze'
+    koerper = b''
+    for name, wert in felder:
+        koerper += f'--{grenze}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{wert}\r\n'.encode()
+    for name, dateiname, daten in dateien:
+        koerper += (f'--{grenze}\r\nContent-Disposition: form-data; name="{name}"; filename="{dateiname}"\r\n'
+                    f'Content-Type: application/octet-stream\r\n\r\n').encode() + daten + b'\r\n'
+    return koerper + f'--{grenze}--\r\n'.encode(), f'multipart/form-data; boundary={grenze}'
+
+
+# Erfundener Text für Fotos - nie echte Impfpässe in Tests (Datenschutz)
+TESTTEXT = ['Impfung gegen Tollwut – gültig bis 09.12.2027', 'Tierarztpraxis Dr. Muster, Hauptstraße 7',
+            'Nobivac L4 Lot A450A03 Exp. 11-2026', 'Leptospirose: geimpft am 05.12.2025, gültig bis 05.12.2026',
+            'Staupe, Hepatitis, Parvovirose (SHP) – Bello', 'Unterschrift und Stempel des Tierarztes']
+
+
+def textfoto(art='block', drehung=0, format='JPEG', exif_ausrichtung=None):
+    """Foto einer erfundenen Impfpass-Seite, um drehung Grad im Uhrzeigersinn verdreht aufgenommen."""
+    from PIL import Image, ImageDraw, ImageFont
+    if art == 'block':      # durchgehender Fließtext, linksbündig
+        bild = Image.new('RGB', (1400, 1000), (225, 236, 245))
+        stift, schrift = ImageDraw.Draw(bild), ImageFont.load_default(size=30)
+        for i in range(18):
+            stift.text((50, 40 + i * 50), TESTTEXT[i % 6], fill=(30, 30, 60), font=schrift)
+    else:                   # verstreute kurze Einträge wie in Tabellenfeldern
+        bild = Image.new('RGB', (1000, 1000), 'white')
+        stift, schrift = ImageDraw.Draw(bild), ImageFont.load_default(size=24)
+        for i in range(12):
+            stift.text((40 + (i % 3) * 300, 60 + i * 70), TESTTEXT[i % 6][:18], fill='black', font=schrift)
+    bild = bild.rotate(-drehung, expand=True)
+    puffer = io.BytesIO()
+    if exif_ausrichtung:
+        exif = Image.Exif()
+        exif[0x0112] = exif_ausrichtung
+        bild.save(puffer, format, exif=exif)
+    else:
+        bild.save(puffer, format)
+    return puffer.getvalue()
 
 
 class GitHubNachbau:
@@ -781,6 +824,8 @@ class HaftpflichtOberflaecheTests(unittest.TestCase):
         self.app_dir = installation_anlegen(os.path.join(self.tmp.name, 'Hundemanager'), '5.1.2')
         self.db = os.path.join(self.app_dir, 'instance', 'hundemanager.db')
         db_anlegen(self.db)
+        if hasattr(self, 'vor_dem_start'):
+            self.vor_dem_start()  # z.B. Datenbank im Stand einer älteren Version
         self.port = freier_port()
         self.log_pfad = os.path.join(self.tmp.name, 'ausgabe.log')
         env = dict(os.environ, HUNDEMANAGER_PORT=str(self.port), HUNDEMANAGER_KEIN_BROWSER='1',
@@ -1149,6 +1194,223 @@ class FotoeinwilligungTests(unittest.TestCase):
         self.einstellen(standard='1', fotoeinwilligung_link=neu)
         self.assertIn(self.STANDARD_LINK, self.anfragen()[0])
         self.assertIn(self.STANDARD_LINK, self.oeffne('/einstellungen').decode('utf-8'))
+
+
+class BilderTests(unittest.TestCase):
+    """Fotos richtig herum - erkannt am Inhalt, gedreht wird nur die Anzeige."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.bilder = lade_modul(os.path.join(REPO, 'bilder.py'), 'bilder_test')
+
+    def test_quer_und_kopfueber_fotografierte_seiten_werden_erkannt(self):
+        for art in ('block', 'felder'):
+            for verdreht in (0, 90, 180, 270):
+                with self.subTest(art=art, verdreht=verdreht):
+                    noetig = (360 - verdreht) % 360
+                    self.assertEqual(self.bilder.ausrichtung_erkennen(textfoto(art, verdreht)), noetig)
+                    self.assertEqual(self.bilder.ausrichtung_erkennen(textfoto(art, verdreht, 'PNG')), noetig)
+
+    def test_ohne_text_oder_ohne_bild_wird_nicht_gedreht(self):
+        from PIL import Image
+        puffer = io.BytesIO()
+        Image.linear_gradient('L').resize((800, 600)).convert('RGB').save(puffer, 'JPEG')
+        self.assertEqual(self.bilder.ausrichtung_erkennen(puffer.getvalue()), 0)
+        self.assertEqual(self.bilder.ausrichtung_erkennen(test_pdf(['Kein Foto'])), 0)
+        self.assertEqual(self.bilder.ausrichtung_erkennen(b'\xff\xd8\xff kaputt'), 0)
+        self.assertIsNone(self.bilder.ansicht(test_pdf(['Kein Foto'])))
+
+    def test_ansicht_dreht_und_beachtet_kamera_ausrichtung(self):
+        from PIL import Image
+        foto = textfoto()  # 1400 x 1000
+        daten, typ = self.bilder.ansicht(foto, 90)
+        self.assertEqual(typ, 'image/jpeg')
+        self.assertEqual(Image.open(io.BytesIO(daten)).size, (1000, 1400))
+        # Handy speichert "um 90 Grad drehen" nur als EXIF-Angabe - die Anzeige wendet sie an
+        daten, _ = self.bilder.ansicht(textfoto(exif_ausrichtung=6), 0)
+        self.assertEqual(Image.open(io.BytesIO(daten)).size, (1000, 1400))
+        # PNG mit Transparenz wird zu JPEG auf weißem Grund
+        puffer = io.BytesIO()
+        Image.new('RGBA', (50, 40), (0, 0, 0, 0)).save(puffer, 'PNG')
+        daten, _ = self.bilder.ansicht(puffer.getvalue(), 270)
+        self.assertEqual(Image.open(io.BytesIO(daten)).size, (40, 50))
+
+    def test_drehung_aus_formular(self):
+        for wert, erwartet in (('90', 90), ('-90', 270), (450, 90), ('45', 0), ('x', 0), (None, 0)):
+            self.assertEqual(self.bilder.drehung_pruefen(wert), erwartet)
+
+
+class ImpfpassOberflaecheTests(unittest.TestCase):
+    """Impfpass-Fotos hochladen, Fälligkeiten eintragen, WhatsApp-Nachfrage bei Ablauf."""
+
+    setUp = HaftpflichtOberflaecheTests.setUp
+    tearDown = HaftpflichtOberflaecheTests.tearDown
+    oeffne = HaftpflichtOberflaecheTests.oeffne
+
+    def hund(self, *spalten):
+        with closing(sqlite3.connect(self.db)) as v:
+            return v.execute(f'SELECT {", ".join(spalten)} FROM hund WHERE id = 1').fetchone()
+
+    def test_fotos_hochladen_impfungen_eintragen_und_nachfragen(self):
+        from PIL import Image
+        heute = date.today()
+        self.oeffne('/person/1/bearbeiten', urllib.parse.urlencode(
+            {'vorname': 'Jürgen', 'nachname': 'Müller', 'mobil': '0171 1234567'}).encode())
+
+        # Zwei Seiten auf einmal - die erste quer fotografiert
+        koerper, typ = multipart_mehrere([('art', 'impfpass')], [
+            ('datei', 'seite1.jpg', textfoto('block', 90)), ('datei', 'seite2.jpg', textfoto('felder'))])
+        seite = self.oeffne('/hund/1/nachweise/hochladen', koerper, typ).decode('utf-8')
+        self.assertIn('Seite 1 von 2', seite)
+        self.assertIn('automatisch gedreht', seite)
+        self.assertEqual(re.findall(r'name="drehung" value="(\d+)"', seite), ['270', '0'])
+        shas = re.findall(r'name="sha256" value="([0-9a-f]{64})"', seite)
+        self.assertEqual(len(shas), 2)
+        self.assertIn('Beim Hund eingetragen:', seite)
+        # Die Anzeige kommt gedreht, die Datei bleibt unverändert
+        bild = Image.open(io.BytesIO(self.oeffne(f'/nachweis/bild/{shas[0]}.jpg?drehung=270')))
+        self.assertEqual(bild.size, (1400, 1000))
+        self.assertEqual(self.oeffne(f'/nachweis/vorschau/{shas[0]}.jpg'), textfoto('block', 90))
+
+        l_bis = heute + timedelta(days=300)
+        t_bis = heute - timedelta(days=10)  # Tollwut abgelaufen
+        formular = [('art', 'impfpass'), ('aussteller', 'Tierarztpraxis Muster'), ('eingereicht_von', 'Jürgen Müller')]
+        for sha, name, drehung in zip(shas, ('seite1.jpg', 'seite2.jpg'), ('270', '0')):
+            formular += [('sha256', sha), ('endung', 'jpg'), ('original_name', name), ('drehung', drehung)]
+        formular += [('impf_gueltig_l', l_bis.isoformat()), ('impf_gueltig_t', t_bis.isoformat()),
+                     ('impf_gueltig_shp_dap_dhp', '2026-06-01')]  # Bello hat schon bis 01.01.2027
+        seite = self.oeffne('/hund/1/nachweise/speichern', urllib.parse.urlencode(formular).encode()).decode('utf-8')
+        self.assertIn('Impfpass-Nachweis für Bello gespeichert', seite)
+        self.assertIn(f'L bis {l_bis.strftime("%d.%m.%Y")}', seite)
+        self.assertIn(f'T bis {t_bis.strftime("%d.%m.%Y")}', seite)
+        self.assertIn('SHP/DAP/DHP (eingetragen ist schon 01.01.2027)', seite)
+        self.assertEqual(self.hund('gueltig_shp_dap_dhp', 'gueltig_l', 'gueltig_t'),
+                         ('2027-01-01', l_bis.isoformat(), t_bis.isoformat()))
+        with closing(sqlite3.connect(self.db)) as v:
+            # Der Nachweis selbst gilt bis zur frühesten Impfung darauf
+            self.assertEqual(v.execute('SELECT drehung, impfungen, gueltig_bis FROM nachweis').fetchone(),
+                             (270, 'SHP/DAP/DHP, L, T', '2026-06-01'))
+            self.assertEqual(v.execute('SELECT nr, drehung, original_name FROM nachweis_seite').fetchall(),
+                             [(2, 0, 'seite2.jpg')])
+
+        # WhatsApp-Nachfrage auf der Impfpass-Seite des Hundes ...
+        seite = self.oeffne('/hund/1/nachweise?art=impfpass').decode('utf-8')
+        links = [html_unescape(l) for l in re.findall(r'href="(https://web\.whatsapp\.com/[^"]+)"', seite)]
+        self.assertEqual(len(links), 1)
+        text = urllib.parse.parse_qs(urllib.parse.urlparse(links[0]).query)['text'][0]
+        self.assertIn(f'• Impfung T: abgelaufen am {t_bis.strftime("%d.%m.%Y")}', text)
+        self.assertIn('• Impfung BbPi: Datum fehlt noch', text)
+        self.assertNotIn('Impfung L:', text)
+        self.assertIn('Foto der Impfpass-Seite', text)
+        # ... und in der Liste der fälligen Impfungen
+        seite = self.oeffne('/nachweise').decode('utf-8')
+        self.assertIn('Impfungen abgelaufen oder bald fällig', seite)
+        self.assertIn('seit 10 Tagen abgelaufen', seite)
+        self.assertIn('WhatsApp-Nachfrage', seite)
+        self.assertNotIn('Impfungen abgelaufen', self.oeffne('/nachweise?art=haftpflicht').decode('utf-8'))
+
+        # Ansehen mit allen Seiten, Seite 2 nachträglich drehen
+        seite = self.oeffne('/nachweis/1/ansehen').decode('utf-8')
+        self.assertIn('Seite 2 von 2', seite)
+        self.oeffne('/nachweis/1/drehen', urllib.parse.urlencode({'seite': '1', 'richtung': 'rechts'}).encode())
+        with closing(sqlite3.connect(self.db)) as v:
+            self.assertEqual(v.execute('SELECT drehung FROM nachweis_seite').fetchone(), (90,))
+
+        # Korrektur: L war ein Tippfehler - auch ein früheres Datum wird übernommen,
+        # weil der Wert beim Hund aus diesem Nachweis stammt
+        seite = self.oeffne('/nachweis/1/bearbeiten').decode('utf-8')
+        self.assertIn(f'value="{l_bis.isoformat()}"', seite)
+        l_korrigiert = heute + timedelta(days=200)
+        korrektur = [(k, w) for k, w in formular if k not in ('impf_gueltig_l', 'drehung')]
+        korrektur += [('impf_gueltig_l', l_korrigiert.isoformat()), ('drehung', '0'), ('drehung', '90')]
+        seite = self.oeffne('/nachweis/1/bearbeiten', urllib.parse.urlencode(korrektur).encode()).decode('utf-8')
+        self.assertIn('Angaben zum Nachweis aktualisiert', seite)
+        self.assertEqual(self.hund('gueltig_l'), (l_korrigiert.isoformat(),))
+        with closing(sqlite3.connect(self.db)) as v:
+            self.assertEqual(v.execute('SELECT drehung FROM nachweis').fetchone(), (0,))
+
+        # Unmögliches Datum: Fehlermeldung, Eingaben bleiben stehen, nichts wird geändert
+        falsch = korrektur + [('impf_gueltig_bbpi', '2099-05-01')]
+        seite = self.oeffne('/nachweis/1/bearbeiten', urllib.parse.urlencode(falsch).encode()).decode('utf-8')
+        self.assertIn('kann nicht stimmen', seite)
+        self.assertIn('value="2099-05-01"', seite)
+        self.assertEqual(self.hund('gueltig_bbpi'), (None,))
+
+    def test_aelteres_foto_ueberschreibt_keine_neuere_impfung(self):
+        neu = date.today() + timedelta(days=500)
+        alt = date.today() + timedelta(days=100)
+        for datum, name in ((neu, 'neu.jpg'), (alt, 'alt.jpg')):
+            koerper, typ = multipart_mehrere([('art', 'impfpass')], [('datei', name, textfoto('felder', 0) + name.encode())])
+            seite = self.oeffne('/hund/1/nachweise/hochladen', koerper, typ).decode('utf-8')
+            sha = re.search(r'name="sha256" value="([0-9a-f]{64})"', seite).group(1)
+            seite = self.oeffne('/hund/1/nachweise/speichern', urllib.parse.urlencode([
+                ('art', 'impfpass'), ('sha256', sha), ('endung', 'jpg'), ('original_name', name),
+                ('drehung', '0'), ('impf_gueltig_t', datum.isoformat())]).encode()).decode('utf-8')
+        self.assertIn('Nicht übernommen', seite)
+        self.assertEqual(self.hund('gueltig_t'), (neu.isoformat(),))
+        # Beide Nachweise bleiben in der Historie
+        self.assertEqual(self.oeffne('/hund/1/nachweise?art=impfpass').decode('utf-8').count('Korrigieren'), 2)
+
+
+class ImpfpassUebergangTests(unittest.TestCase):
+    """Saskias Datenbank ab 5.1.3 hat schon Nachweise - ohne Drehung, Impfdaten und weitere Seiten."""
+
+    setUp = HaftpflichtOberflaecheTests.setUp
+    tearDown = HaftpflichtOberflaecheTests.tearDown
+    oeffne = HaftpflichtOberflaecheTests.oeffne
+
+    def vor_dem_start(self):
+        self.foto = textfoto('block', 90)
+        self.sha = hashlib.sha256(self.foto).hexdigest()
+        ablage = os.path.join(self.app_dir, 'instance', 'nachweise')
+        os.makedirs(ablage)
+        with open(os.path.join(ablage, f'{self.sha}.jpg'), 'wb') as f:
+            f.write(self.foto)
+        with closing(sqlite3.connect(self.db)) as v:
+            v.executescript(f'''
+                ALTER TABLE person ADD COLUMN mobil VARCHAR(30);
+                ALTER TABLE person ADD COLUMN email VARCHAR(200);
+                CREATE TABLE nachweis (id INTEGER PRIMARY KEY, hund_id INTEGER NOT NULL REFERENCES hund(id),
+                    art VARCHAR(20) NOT NULL, datei_sha256 VARCHAR(64) NOT NULL, datei_endung VARCHAR(4) NOT NULL,
+                    original_name VARCHAR(255), hochgeladen_am DATETIME NOT NULL, eingereicht_von VARCHAR(200),
+                    aussteller VARCHAR(200), nummer VARCHAR(100), ausgestellt_am DATE, gueltig_bis DATE,
+                    tier_laut_nachweis VARCHAR(100), chipnummer VARCHAR(30), impfungen VARCHAR(100), bemerkung TEXT);
+                INSERT INTO nachweis (hund_id, art, datei_sha256, datei_endung, original_name, hochgeladen_am,
+                                      aussteller, gueltig_bis, impfungen)
+                VALUES (1, 'impfpass', '{self.sha}', 'jpg', 'pass.jpg', '2026-10-01 10:00:00',
+                        'Tierarztpraxis Alt', '2027-03-01', 'SHP/DAP/DHP, L');
+            ''')
+            v.commit()
+
+    def test_alte_nachweise_bleiben_und_lassen_sich_drehen_und_ergaenzen(self):
+        with closing(sqlite3.connect(self.db)) as v:
+            spalten = {z[1] for z in v.execute('PRAGMA table_info(nachweis)')}
+            self.assertTrue({'drehung', 'impf_gueltig'} <= spalten)
+            self.assertEqual(v.execute('SELECT drehung, impfungen FROM nachweis').fetchone(), (0, 'SHP/DAP/DHP, L'))
+            self.assertEqual(v.execute('SELECT COUNT(*) FROM nachweis_seite').fetchone(), (0,))
+        # Vor der Änderung am Schema wurde gesichert
+        self.assertTrue(any('vor-migration' in n for n in os.listdir(os.path.join(self.app_dir, 'instance', 'backup'))))
+
+        seite = self.oeffne('/hund/1/nachweise?art=impfpass').decode('utf-8')
+        self.assertIn('Tierarztpraxis Alt', seite)
+        self.assertIn('SHP/DAP/DHP, L', seite)
+        self.assertIn('Dokument', self.oeffne('/nachweis/1/ansehen').decode('utf-8'))
+        self.oeffne('/nachweis/1/drehen', urllib.parse.urlencode({'seite': '0', 'richtung': 'links'}).encode())
+        with closing(sqlite3.connect(self.db)) as v:
+            self.assertEqual(v.execute('SELECT drehung FROM nachweis').fetchone(), (270,))
+
+        # Alter Nachweis nachträglich mit Daten ergänzt - die alten Häkchen bleiben erhalten
+        seite = self.oeffne('/nachweis/1/bearbeiten').decode('utf-8')
+        self.assertIn('name="impfungen" value="SHP/DAP/DHP"', seite)
+        formular = re.findall(r'<input type="hidden" name="(\w+)" value="([^"]*)"', seite)
+        formular += [('impf_gueltig_t', '2027-12-09')]
+        seite = self.oeffne('/nachweis/1/bearbeiten', urllib.parse.urlencode(formular).encode()).decode('utf-8')
+        self.assertIn('T bis 09.12.2027', seite)
+        with closing(sqlite3.connect(self.db)) as v:
+            self.assertEqual(v.execute('SELECT impfungen, gueltig_bis FROM nachweis').fetchone(),
+                             ('SHP/DAP/DHP, L, T', '2027-12-09'))
+            self.assertEqual(v.execute('SELECT gueltig_t FROM hund WHERE id = 1').fetchone(), ('2027-12-09',))
+        self.assertEqual(self.oeffne('/nachweis/1/datei'), self.foto)  # Datei unverändert
 
 
 def html_unescape(text):

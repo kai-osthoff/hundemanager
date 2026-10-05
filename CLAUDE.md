@@ -126,6 +126,21 @@ Programm passiert erst nach einer geprüften Sicherung.**
 - Erkennung (`nachweise.angaben_vorschlagen`) liefert nur Vorschläge (bisher nur
   Haftpflicht-PDFs); pypdf gibt Textblöcke in beliebiger Reihenfolge aus – Muster nie
   an der Reihenfolge festmachen.
+- **Mehrere Dateien je Nachweis** (z. B. Tollwut-Seite + Impfseite): die erste steht am
+  `Nachweis`, weitere in `nachweis_seite` (`nr` ab 2). `Nachweis.seiten` liefert alle.
+- **Drehen nur in der Anzeige:** `drehung` (0/90/180/270, im Uhrzeigersinn) am Nachweis bzw.
+  an der Seite. `bilder.py` schätzt beim Hochladen die nötige Drehung am Inhalt
+  (Zeilenprofil quer/hoch, Ober- vs. Unterlängen für oben/unten – ohne Texterkennung, nur
+  Pillow) und liefert gedrehte Ansichten (`/nachweis/bild/<sha>.<endung>?drehung=`).
+  Fehlt Pillow, läuft alles ohne Drehung weiter. Die Datei wird nie umgeschrieben.
+- **Impfpass:** Saskia liest die Daten von den Fotos ab und trägt je Impfung „gültig bis“ ein
+  (`impf_gueltig` als JSON am Nachweis). Beim Speichern landen sie am Hund
+  (`impfungen_uebernehmen`): ein späteres Datum gewinnt – ein altes Foto überschreibt keine
+  neuere Impfung; bei einer Korrektur wird nur zurückgesetzt, was aus diesem Nachweis stammt.
+  `gueltig_bis` des Nachweises = früheste Impfung darauf. Daten > 5 Jahre in der Zukunft
+  oder vor 2000 werden abgelehnt.
+- Fällige Impfungen (abgelaufen oder innerhalb `ERINNERUNG_VORLAUF`) stehen in `/nachweise`
+  mit WhatsApp-Nachfrage (`whatsapp.impfpass_nachricht`), Grundlage sind die Daten am Hund.
 
 ## WhatsApp an Halter
 

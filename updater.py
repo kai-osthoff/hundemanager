@@ -33,7 +33,8 @@ PRUEF_INTERVALL = int(os.environ.get('HUNDEMANAGER_PRUEF_INTERVALL') or 10 * 60)
 
 APP_DIR = backup.APP_DIR
 # Pflichtdateien - fehlt eine im Download, wird das Update gar nicht erst begonnen
-PFLICHTDATEIEN = ['app.py', 'updater.py', 'backup.py', 'nachweise.py', 'whatsapp.py', 'start.py', 'VERSION', 'requirements.txt']
+PFLICHTDATEIEN = ['app.py', 'updater.py', 'backup.py', 'nachweise.py', 'whatsapp.py', 'bilder.py', 'start.py',
+                  'VERSION', 'requirements.txt']
 
 _status = {
     'geprueft_um': 0,

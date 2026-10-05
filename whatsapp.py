@@ -61,6 +61,17 @@ def fehlende_daten_nachricht(vorname, hundename, punkte):
     return '\n'.join(zeilen)
 
 
+def impfpass_nachricht(vorname, hundename, punkte):
+    """Bitte um ein Foto der Impfpass-Seite, wenn Impfungen abgelaufen, bald fällig oder unbekannt sind."""
+    zeilen = [f'Hallo {vorname},', '',
+              f'bei {hundename} ist im Impfpass etwas abgelaufen, bald fällig oder mir noch nicht bekannt:']
+    zeilen += [f'• {p}' for p in punkte]
+    zeilen += ['', 'Bitte schick mir ein Foto der Impfpass-Seite mit der aktuellen Impfung hier per WhatsApp '
+               '– bei einer Auffrischung gern, sobald sie gemacht ist.',
+               '', 'Danke und viele Grüße', ABSENDER]
+    return '\n'.join(zeilen)
+
+
 def fotoeinwilligung_nachricht(vorname, hundenamen, formular_link):
     """Bitte um die unterschriebene Einwilligung zu Fotoaufnahmen - mit Link zum Formular."""
     if len(hundenamen) > 1:

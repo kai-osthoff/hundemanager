@@ -112,6 +112,8 @@
             <div class="hund-fuss">
                 <span>{{ hund.bemerkung or '' }}</span>
                 <span style="display: flex; gap: 6px;">
+                    <a href="{{ url_for('hund_nachweise', hund_id=hund.id, art='impfpass') }}" class="knopf"
+                       title="Fotos vom Impfpass hochladen und Impfungen eintragen">Impfpass</a>
                     <a href="{{ url_for('hund_bearbeiten', hund_id=hund.id) }}" class="knopf">Bearbeiten</a>
                     <form action="{{ url_for('hund_loeschen', hund_id=hund.id) }}" method="POST" onsubmit="return confirm('{{ hund.name }} wirklich löschen?');">
                         <button type="submit" class="knopf knopf-gefahr" aria-label="{{ hund.name }} löschen">Löschen</button>
