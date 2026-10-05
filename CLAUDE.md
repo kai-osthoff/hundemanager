@@ -68,6 +68,21 @@ Programm passiert erst nach einer geprüften Sicherung.**
   Nur nullable oder mit Default; Umbenennen/Löschen braucht eine eigene Migration.
 - Jeder neue Ernstfall bekommt einen Test in `tests/` – vor allem Update-Übergänge.
 
+## Haftpflicht-Nachweise
+
+- Dateien liegen unveränderlich in `instance/nachweise/<sha256>.<pdf|jpg|png>` –
+  nie überschreiben, nie löschen. Ein neuer Nachweis kommt *dazu*, alte bleiben als
+  Historie. Korrigiert werden nur die Angaben in der Datenbank, nie die Datei.
+- Sicherungen legen Nachweise in einer gemeinsamen Ablage `backup/nachweise/` ab
+  (einmal pro Inhalt), das Manifest listet sie, `pruefe_backup()` prüft jede Datei.
+  Diese Ablage wird nie aufgeräumt.
+- Dateityp wird am Inhalt erkannt, nicht an der Endung.
+- **Datenschutz:** Echte Nachweise enthalten Namen, Adressen, Vertragsnummern.
+  Nie ins Repo (`.gitignore` sperrt PDFs/Bilder), nie in Tests, nie in Commits,
+  Release-Notizen oder Issues zitieren. Tests nutzen erfundene Daten (`test_pdf()`).
+- Erkennung (`nachweise.angaben_vorschlagen`) liefert nur Vorschläge; pypdf gibt
+  Textblöcke in beliebiger Reihenfolge aus – Muster nie an der Reihenfolge festmachen.
+
 ## Releases
 
 - **Versionen: nur 5.1.x, nur die letzte Stelle hochzählen** (5.1.1, 5.1.2, …).

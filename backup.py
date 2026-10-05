@@ -16,6 +16,7 @@
 import hashlib
 import json
 import os
+import re
 import shutil
 import sqlite3
 import time
@@ -30,10 +31,17 @@ BACKUP_DIR = os.path.join(INSTANCE_DIR, 'backup')
 UPDATE_MARKER = os.path.join(INSTANCE_DIR, 'update_laeuft.json')
 UPDATE_FEHLGESCHLAGEN = os.path.join(INSTANCE_DIR, 'update_fehlgeschlagen.json')
 
+NACHWEIS_DIR = os.path.join(INSTANCE_DIR, 'nachweise')
+# Gemeinsame Ablage der Nachweise neben den Sicherungen. Nachweise sind
+# unveränderlich und nach ihrer Prüfsumme benannt - jede Datei liegt hier
+# nur einmal, egal wie viele Sicherungen sie enthalten. Wird nie aufgeräumt.
+NACHWEIS_ABLAGE = 'nachweise'
+NACHWEIS_NAME = re.compile(r'^([0-9a-f]{64})\.(pdf|jpg|png)$')
+
 DB_DATEI = 'hundemanager.db'
 CODE_DATEI = 'code.zip'
 MANIFEST_DATEI = 'manifest.json'
-UNVOLLSTAENDIG = '.unvollstaendig'
+UNVOLLSTAENDIG = '.unvollstaendig'  # nur noch für Reste aus v5.1.1-Vorabständen
 
 # Wie viele Sicherungen je Art aufbewahrt werden
 AUFBEWAHRUNG = {
@@ -129,6 +137,63 @@ def _code_dateien():
             yield pfad, os.path.relpath(pfad, APP_DIR).replace(os.sep, '/')
 
 
+def _nachweis_ok(pfad):
+    """Ein Nachweis ist genau dann in Ordnung, wenn sein Inhalt zu seinem Namen passt."""
+    m = NACHWEIS_NAME.match(os.path.basename(pfad))
+    return bool(m) and os.path.isfile(pfad) and _sha256(pfad) == m.group(1)
+
+
+def _nachweis_kopieren(quelle, ziel):
+    """Kopiert einen Nachweis geprüft - eine vorhandene, intakte Datei wird nie angefasst."""
+    if _nachweis_ok(ziel):
+        return
+    os.makedirs(os.path.dirname(ziel), exist_ok=True)
+    tmp = ziel + '.tmp'
+    shutil.copyfile(quelle, tmp)
+    if not _nachweis_ok_inhalt(tmp, os.path.basename(ziel)):
+        os.remove(tmp)
+        raise BackupFehler(f'Nachweis {os.path.basename(ziel)} konnte nicht korrekt kopiert werden.')
+    _mit_wiederholung(os.replace, tmp, ziel)
+
+
+def _nachweis_ok_inhalt(pfad, name):
+    m = NACHWEIS_NAME.match(name)
+    return bool(m) and _sha256(pfad) == m.group(1)
+
+
+def _nachweise_sichern(basis):
+    """Legt alle Nachweise in der gemeinsamen Ablage ab. Gibt (namen, hinweise) zurück."""
+    namen, hinweise = [], []
+    if not os.path.isdir(NACHWEIS_DIR):
+        return namen, hinweise
+    ablage = os.path.join(basis, NACHWEIS_ABLAGE)
+    for name in sorted(os.listdir(NACHWEIS_DIR)):
+        if not NACHWEIS_NAME.match(name):
+            continue
+        quelle = os.path.join(NACHWEIS_DIR, name)
+        ziel = os.path.join(ablage, name)
+        if _nachweis_ok(quelle):
+            _nachweis_kopieren(quelle, ziel)
+            namen.append(name)
+        elif _nachweis_ok(ziel):
+            # Original beschädigt, aber eine intakte Kopie ist gesichert
+            namen.append(name)
+            hinweise.append(f'Nachweis {name[:12]}… im Programmordner ist beschädigt - '
+                            f'eine intakte Kopie liegt in den Sicherungen.')
+        else:
+            hinweise.append(f'Nachweis {name[:12]}… ist beschädigt und konnte nicht gesichert werden.')
+    return namen, hinweise
+
+
+def _nachweise_zurueckholen(ordner, manifest):
+    """Fehlende oder beschädigte Nachweise aus der Ablage der Sicherung zurückkopieren."""
+    ablage = os.path.join(os.path.dirname(ordner), NACHWEIS_ABLAGE)
+    for name in manifest.get('nachweise', []):
+        ziel = os.path.join(NACHWEIS_DIR, name)
+        if not _nachweis_ok(ziel):
+            _nachweis_kopieren(os.path.join(ablage, name), ziel)
+
+
 def _zeitstempel():
     return datetime.now().strftime('%Y-%m-%d_%H%M%S')
 
@@ -136,10 +201,12 @@ def _zeitstempel():
 # --- Sicherung erstellen ---
 
 def erstelle_backup(art, version, mit_code=True):
-    """Erstellt und prüft eine Sicherung. Gibt den Ordner zurück oder wirft BackupFehler.
+    """Erstellt und prüft eine Sicherung. Gibt (ordner, hinweis) zurück oder wirft BackupFehler.
 
-    Ist eine Sicherung nicht nachweislich vollständig, gibt es keinen Ordner ohne
-    ".unvollstaendig" - wer das Ergebnis nutzt, kann sich also darauf verlassen.
+    Eine Sicherung gilt erst als vorhanden, wenn ihre manifest.json existiert - und
+    die wird als Allerletztes geschrieben, nachdem alles geprüft ist. Ordner werden
+    bewusst nicht umbenannt: unter Windows blockieren Virenscanner und Indexdienst
+    das Umbenennen von Ordnern gern, das Ersetzen einzelner Dateien dagegen kaum.
     """
     if art not in AUFBEWAHRUNG:
         raise ValueError(f'Unbekannte Sicherungsart: {art}')
@@ -147,12 +214,11 @@ def erstelle_backup(art, version, mit_code=True):
         os.makedirs(BACKUP_DIR, exist_ok=True)
         name = f'{_zeitstempel()}_v{version}_{art}'
         ziel = os.path.join(BACKUP_DIR, name)
-        while os.path.exists(ziel) or os.path.exists(ziel + UNVOLLSTAENDIG):  # gleiche Sekunde
+        while os.path.exists(ziel):  # zwei Sicherungen in derselben Sekunde
             time.sleep(1)
             name = f'{_zeitstempel()}_v{version}_{art}'
             ziel = os.path.join(BACKUP_DIR, name)
-        arbeit = ziel + UNVOLLSTAENDIG
-        os.makedirs(arbeit)
+        os.makedirs(ziel)
     except OSError as e:
         raise BackupFehler(f'Sicherungsordner nicht beschreibbar ({e.__class__.__name__}: {e})') from e
 
@@ -163,10 +229,11 @@ def erstelle_backup(art, version, mit_code=True):
             'erstellt': datetime.now().isoformat(timespec='seconds'),
             'dateien': {},
             'datensaetze': None,
+            'nachweise': [],
         }
 
         if os.path.exists(DB_PFAD):
-            db_kopie = os.path.join(arbeit, DB_DATEI)
+            db_kopie = os.path.join(ziel, DB_DATEI)
             # Bei gleichzeitigem Schreiben kann die Zählung abweichen - dann erneut sichern
             for versuch in range(3):
                 _db_kopieren(DB_PFAD, db_kopie)
@@ -180,42 +247,57 @@ def erstelle_backup(art, version, mit_code=True):
                 raise BackupFehler('Die Datenbank-Kopie stimmt nicht mit dem Original überein.')
             manifest['datensaetze'] = zaehler_kopie
 
+        manifest['nachweise'], hinweise = _nachweise_sichern(BACKUP_DIR)
+
         if mit_code:
-            code_zip = os.path.join(arbeit, CODE_DATEI)
-            with zipfile.ZipFile(code_zip, 'w', zipfile.ZIP_DEFLATED) as zf:
+            with zipfile.ZipFile(os.path.join(ziel, CODE_DATEI), 'w', zipfile.ZIP_DEFLATED) as zf:
                 for pfad, rel in _code_dateien():
                     zf.write(pfad, rel)
 
-        for datei in os.listdir(arbeit):
-            manifest['dateien'][datei] = _sha256(os.path.join(arbeit, datei))
-        with open(os.path.join(arbeit, MANIFEST_DATEI), 'w', encoding='utf-8') as f:
-            json.dump(manifest, f, ensure_ascii=False, indent=2)
+        for datei in os.listdir(ziel):
+            manifest['dateien'][datei] = _sha256(os.path.join(ziel, datei))
 
-        pruefe_backup(arbeit)
-        _mit_wiederholung(os.replace, arbeit, ziel)
+        _pruefe(ziel, manifest)
+        _schreibe_manifest(ziel, manifest)
     except BackupFehler:
-        shutil.rmtree(arbeit, ignore_errors=True)
+        shutil.rmtree(ziel, ignore_errors=True)
         raise
     except Exception as e:
-        shutil.rmtree(arbeit, ignore_errors=True)
+        shutil.rmtree(ziel, ignore_errors=True)
         raise BackupFehler(f'Sicherung fehlgeschlagen ({e.__class__.__name__}: {e})') from e
 
-    spiegel_fehler = _spiegeln(ziel)
+    spiegel_fehler = _spiegeln(ziel, manifest)
+    if spiegel_fehler:
+        hinweise.append(spiegel_fehler)
     aufraeumen()
-    return ziel, spiegel_fehler
+    return ziel, ' '.join(hinweise) or None
 
 
-def _spiegeln(ordner):
+def _schreibe_manifest(ordner, manifest):
+    """Macht die Sicherung gültig - atomar über eine Datei, nie über einen Ordner."""
+    tmp = os.path.join(ordner, MANIFEST_DATEI + '.tmp')
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(manifest, f, ensure_ascii=False, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+    _mit_wiederholung(os.replace, tmp, os.path.join(ordner, MANIFEST_DATEI))
+
+
+def _spiegeln(ordner, manifest):
     """Kopie in den Dokumente-Ordner. Ein Fehler hier blockiert nichts, wird aber gemeldet."""
     try:
         basis = zweiter_ort()
-        os.makedirs(basis, exist_ok=True)
+        quelle_ablage = os.path.join(os.path.dirname(ordner), NACHWEIS_ABLAGE)
+        for name in manifest.get('nachweise', []):
+            _nachweis_kopieren(os.path.join(quelle_ablage, name), os.path.join(basis, NACHWEIS_ABLAGE, name))
         ziel = os.path.join(basis, os.path.basename(ordner))
-        arbeit = ziel + UNVOLLSTAENDIG
-        shutil.rmtree(arbeit, ignore_errors=True)
-        shutil.copytree(ordner, arbeit)
-        pruefe_backup(arbeit)
-        _mit_wiederholung(os.replace, arbeit, ziel)
+        os.makedirs(ziel, exist_ok=True)
+        for datei in manifest['dateien']:
+            tmp = os.path.join(ziel, datei + '.tmp')
+            shutil.copyfile(os.path.join(ordner, datei), tmp)
+            _mit_wiederholung(os.replace, tmp, os.path.join(ziel, datei))
+        _pruefe(ziel, manifest)
+        _schreibe_manifest(ziel, manifest)
         return None
     except Exception as e:
         return f'Zweite Kopie im Dokumente-Ordner fehlgeschlagen ({e.__class__.__name__})'
@@ -234,7 +316,11 @@ def pruefe_backup(ordner):
         manifest = lies_manifest(ordner)
     except (OSError, ValueError) as e:
         raise BackupFehler(f'Sicherung ohne lesbares Manifest ({e.__class__.__name__})')
+    _pruefe(ordner, manifest)
+    return manifest
 
+
+def _pruefe(ordner, manifest):
     for datei, pruefsumme in manifest['dateien'].items():
         pfad = os.path.join(ordner, datei)
         if not os.path.exists(pfad):
@@ -249,11 +335,15 @@ def pruefe_backup(ordner):
         if _db_zaehler(db_kopie) != manifest['datensaetze']:
             raise BackupFehler('Die gesicherte Datenbank ist unvollständig.')
 
+    ablage = os.path.join(os.path.dirname(ordner), NACHWEIS_ABLAGE)
+    for name in manifest.get('nachweise', []):
+        if not _nachweis_ok(os.path.join(ablage, name)):
+            raise BackupFehler(f'Nachweis {name[:12]}… fehlt in der Sicherung oder ist beschädigt.')
+
     if CODE_DATEI in manifest['dateien']:
         with zipfile.ZipFile(os.path.join(ordner, CODE_DATEI)) as zf:
             if zf.testzip() is not None:
                 raise BackupFehler('Die Programm-Sicherung ist beschädigt.')
-    return manifest
 
 
 # --- Auflisten und Aufräumen ---
@@ -309,11 +399,14 @@ def aufraeumen():
             for b in dieser_art[anzahl:]:
                 if b['name'] not in geschuetzt:
                     shutil.rmtree(b['ordner'], ignore_errors=True)
-        # Reste abgebrochener Sicherungen (älter als 1 Tag)
+        # Reste abgebrochener Sicherungen: Ordner ohne Manifest, älter als 1 Tag.
+        # Die Nachweis-Ablage hat kein Manifest und wird nie gelöscht.
         if os.path.isdir(basis):
             for name in os.listdir(basis):
                 pfad = os.path.join(basis, name)
-                if name.endswith(UNVOLLSTAENDIG) and time.time() - os.path.getmtime(pfad) > 86400:
+                if (name != NACHWEIS_ABLAGE and os.path.isdir(pfad)
+                        and not os.path.exists(os.path.join(pfad, MANIFEST_DATEI))
+                        and time.time() - os.path.getmtime(pfad) > 86400):
                     shutil.rmtree(pfad, ignore_errors=True)
 
 
@@ -338,6 +431,7 @@ def datenbank_wiederherstellen(ordner, version):
     _db_kopieren(os.path.join(ordner, DB_DATEI), DB_PFAD)
     if not _db_integritaet(DB_PFAD) or _db_zaehler(DB_PFAD) != manifest['datensaetze']:
         raise BackupFehler('Wiederherstellung konnte nicht bestätigt werden.')
+    _nachweise_zurueckholen(ordner, manifest)
     return manifest
 
 
@@ -403,8 +497,10 @@ def update_zuruecknehmen(grund):
     except Exception:
         pass
     code_wiederherstellen(ordner, marker.get('neue_dateien', []))
-    if lies_manifest(ordner)['datensaetze'] is not None:
+    manifest = lies_manifest(ordner)
+    if manifest['datensaetze'] is not None:
         _db_kopieren(os.path.join(ordner, DB_DATEI), DB_PFAD)
+    _nachweise_zurueckholen(ordner, manifest)
     with open(UPDATE_FEHLGESCHLAGEN, 'w', encoding='utf-8') as f:
         json.dump({
             'version': marker.get('neue_version'),

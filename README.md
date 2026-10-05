@@ -75,6 +75,16 @@ Der Hundemanager sichert **einmal täglich** und **vor jedem Update**, im Progra
 zusätzlich in **Dokumente\Hundemanager-Backups**. Unten auf der Seite unter **„Sicherungen“**
 kannst du selbst sichern oder einen älteren Stand zurückholen.
 
+## Haftpflicht-Nachweis hinterlegen
+
+1. In der Übersicht beim Hund in der Spalte **Haftpflicht** klicken.
+2. Unter **„Neuen Nachweis hochladen“** das PDF der Versicherung (oder ein Foto) auswählen → **Hochladen**.
+3. Bei PDFs füllt der Hundemanager die Angaben selbst aus (Versicherer, Vertragsnummer, gültig bis …).
+   **Kurz prüfen** und **Speichern**. Passt der Hundename im Dokument nicht, erscheint eine Warnung.
+
+In der Übersicht steht danach **📄 gültig bis …** – grün, orange (läuft bald ab) oder rot (abgelaufen).
+Alle Nachweise bleiben dauerhaft gespeichert, auch abgelaufene, und sind in jeder Sicherung enthalten.
+
 ## Wenn etwas nicht klappt
 
 - **Der Hundemanager startet nicht oder Daten fehlen:** Schwarzes Fenster schließen, deinen Hundemanager-Ordner

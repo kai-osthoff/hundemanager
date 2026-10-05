@@ -1,0 +1,60 @@
+<!-- templates/haftpflicht_angaben.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="form-container">
+    <h2>{{ 'Nachweis korrigieren' if nachweis else 'Nachweis prüfen und speichern' }}</h2>
+    <p style="color: #6c757d; margin-bottom: 15px;">
+        Hund: <strong>{{ hund.name }}</strong> ({{ hund.besitzer.vollstaendiger_name }})
+    </p>
+
+    <p style="margin-bottom: 15px;">
+        <a href="{{ url_for('nachweis_vorschau', sha256=sha256, endung=endung) }}" target="_blank" class="btn btn-secondary btn-sm">📄 Dokument ansehen</a>
+    </p>
+
+    {% if text_erkannt %}
+        <div class="flash success">Angaben wurden aus dem Dokument erkannt – bitte kurz prüfen.</div>
+    {% elif not nachweis %}
+        <div class="flash" style="background: #e9ecef;">Bitte die Angaben aus dem Dokument eintragen.</div>
+    {% endif %}
+    {% for w in warnungen %}
+        <div class="flash error">⚠️ {{ w }}</div>
+    {% endfor %}
+
+    <form method="POST" action="{{ url_for('nachweis_bearbeiten', nachweis_id=nachweis.id) if nachweis else url_for('haftpflicht_speichern', hund_id=hund.id) }}">
+        <input type="hidden" name="sha256" value="{{ sha256 }}">
+        <input type="hidden" name="endung" value="{{ endung }}">
+        <input type="hidden" name="original_name" value="{{ original_name or '' }}">
+
+        <div class="form-group">
+            <label for="gueltig_bis" class="required">Gültig bis</label>
+            <input type="date" id="gueltig_bis" name="gueltig_bis" value="{{ vorschlag.get('gueltig_bis')|iso_datum }}" required>
+        </div>
+        <div class="form-group">
+            <label for="ausgestellt_am">Ausgestellt am</label>
+            <input type="date" id="ausgestellt_am" name="ausgestellt_am" value="{{ vorschlag.get('ausgestellt_am')|iso_datum }}">
+        </div>
+        <div class="form-group">
+            <label for="versicherer">Versicherer</label>
+            <input type="text" id="versicherer" name="versicherer" value="{{ vorschlag.get('versicherer') or '' }}">
+        </div>
+        <div class="form-group">
+            <label for="vertragsnummer">Vertragsnummer</label>
+            <input type="text" id="vertragsnummer" name="vertragsnummer" value="{{ vorschlag.get('vertragsnummer') or '' }}">
+        </div>
+        <div class="form-group">
+            <label for="tier_laut_nachweis">Tier laut Nachweis</label>
+            <input type="text" id="tier_laut_nachweis" name="tier_laut_nachweis" value="{{ vorschlag.get('tier') or vorschlag.get('tier_laut_nachweis') or '' }}">
+        </div>
+        <div class="form-group">
+            <label for="chipnummer">Chipnummer</label>
+            <input type="text" id="chipnummer" name="chipnummer" value="{{ vorschlag.get('chipnummer') or '' }}">
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Speichern</button>
+            <a href="{{ url_for('haftpflicht', hund_id=hund.id) }}" class="btn btn-secondary">Abbrechen</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

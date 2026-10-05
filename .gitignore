@@ -10,3 +10,9 @@ build/
 dist/
 *.spec
 .DS_Store
+
+# Echte Dokumente (Versicherungsnachweise o.ä.) nie ins öffentliche Repo
+*.pdf
+*.jpg
+*.jpeg
+*.png

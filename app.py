@@ -16,6 +16,7 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from sqlalchemy import func, inspect, text #NEU
 import backup
+import nachweise
 import updater
 
 app = Flask(__name__)
@@ -24,6 +25,7 @@ app.config['SECRET_KEY'] = secrets.token_hex(32)
 os.makedirs(backup.INSTANCE_DIR, exist_ok=True)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + backup.DB_PFAD
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['MAX_CONTENT_LENGTH'] = nachweise.MAX_GROESSE + 1024 * 1024
 
 db = SQLAlchemy(app)
 
@@ -49,9 +51,33 @@ class Hund(db.Model):
     gueltig_l = db.Column(db.Date, nullable=True)
     gueltig_bbpi = db.Column(db.Date, nullable=True)
     gueltig_t = db.Column(db.Date, nullable=True)
-    haftpflicht_gueltig = db.Column(db.Boolean, default=False)
+    haftpflicht_gueltig = db.Column(db.Boolean, default=False)  # alte Ja/Nein-Angabe ohne Nachweis
     bemerkung = db.Column(db.Text, nullable=True)
     person_id = db.Column(db.Integer, db.ForeignKey('person.id'), nullable=False)
+    nachweise = db.relationship('HaftpflichtNachweis', backref='hund', lazy=True,
+                                cascade='all, delete-orphan',
+                                order_by='HaftpflichtNachweis.gueltig_bis.desc()')
+
+    @property
+    def aktueller_nachweis(self):
+        """Der Nachweis mit der längsten Gültigkeit - ältere bleiben als Historie erhalten."""
+        return self.nachweise[0] if self.nachweise else None
+
+
+class HaftpflichtNachweis(db.Model):
+    """Ein hochgeladener Nachweis. Die Datei selbst liegt unveränderlich in instance/nachweise/."""
+    id = db.Column(db.Integer, primary_key=True)
+    hund_id = db.Column(db.Integer, db.ForeignKey('hund.id'), nullable=False)
+    datei_sha256 = db.Column(db.String(64), nullable=False)
+    datei_endung = db.Column(db.String(4), nullable=False)
+    original_name = db.Column(db.String(255), nullable=True)
+    hochgeladen_am = db.Column(db.DateTime, nullable=False, default=datetime.now)
+    ausgestellt_am = db.Column(db.Date, nullable=True)
+    gueltig_bis = db.Column(db.Date, nullable=False)
+    versicherer = db.Column(db.String(200), nullable=True)
+    vertragsnummer = db.Column(db.String(100), nullable=True)
+    tier_laut_nachweis = db.Column(db.String(100), nullable=True)
+    chipnummer = db.Column(db.String(30), nullable=True)
 
 def get_status(datum):
     """Prüft den Status eines Gültigkeitsdatums"""
@@ -74,8 +100,15 @@ def format_datum(datum):
         return '-'
     return datum.strftime('%d.%m.%Y')
 
+def iso_datum(wert):
+    """Für <input type="date">: date-Objekt oder bereits 'JJJJ-MM-TT'."""
+    if isinstance(wert, date):
+        return wert.isoformat()
+    return wert or ''
+
 # Jinja2 Filter registrieren
 app.jinja_env.filters['format_datum'] = format_datum
+app.jinja_env.filters['iso_datum'] = iso_datum
 app.jinja_env.globals['get_status'] = get_status
 
 @app.route('/')
@@ -209,6 +242,136 @@ def hund_loeschen(hund_id):
     flash(f'Hund "{name}" wurde gelöscht.', 'success')
     return redirect(url_for('index'))
 
+# --- Haftpflicht-Nachweise ---
+
+@app.errorhandler(413)
+def datei_zu_gross(_fehler):
+    flash('Die Datei ist zu groß (maximal 25 MB).', 'error')
+    return redirect(request.referrer or url_for('index'))
+
+
+@app.route('/hund/<int:hund_id>/haftpflicht')
+def haftpflicht(hund_id):
+    hund = Hund.query.get_or_404(hund_id)
+    return render_template('haftpflicht.html', hund=hund, heute=date.today())
+
+
+@app.route('/hund/<int:hund_id>/haftpflicht/hochladen', methods=['POST'])
+def haftpflicht_hochladen(hund_id):
+    hund = Hund.query.get_or_404(hund_id)
+    datei = request.files.get('datei')
+    if not datei or not datei.filename:
+        flash('Bitte eine Datei auswählen.', 'error')
+        return redirect(url_for('haftpflicht', hund_id=hund.id))
+
+    daten = datei.read()
+    try:
+        sha256, endung = nachweise.speichern(daten)
+    except nachweise.NachweisFehler as e:
+        flash(str(e), 'error')
+        return redirect(url_for('haftpflicht', hund_id=hund.id))
+
+    vorschlag = nachweise.angaben_vorschlagen(nachweise.pdf_text(daten)) if endung == 'pdf' else {}
+    warnungen = []
+    tier = vorschlag.get('tier')
+    if tier and hund.name.casefold() not in tier.casefold():
+        warnungen.append(f'Im Nachweis steht das Tier „{tier}“ – passt das zu {hund.name}?')
+    gueltig_bis = vorschlag.get('gueltig_bis')
+    if gueltig_bis and gueltig_bis < date.today():
+        warnungen.append('Laut Dokument ist dieser Nachweis bereits abgelaufen.')
+
+    return render_template('haftpflicht_angaben.html', hund=hund, nachweis=None, vorschlag=vorschlag,
+                           warnungen=warnungen, sha256=sha256, endung=endung,
+                           original_name=os.path.basename(datei.filename)[:255],
+                           text_erkannt=bool(vorschlag))
+
+
+def _nachweis_angaben(nachweis):
+    """Übernimmt die Formularfelder. Gibt eine Fehlermeldung zurück oder None."""
+    gueltig_bis = parse_datum(request.form.get('gueltig_bis'))
+    if not gueltig_bis:
+        return 'Bitte angeben, bis wann der Nachweis gültig ist.'
+    nachweis.gueltig_bis = gueltig_bis
+    nachweis.ausgestellt_am = parse_datum(request.form.get('ausgestellt_am'))
+    nachweis.versicherer = request.form.get('versicherer', '').strip()[:200] or None
+    nachweis.vertragsnummer = request.form.get('vertragsnummer', '').strip()[:100] or None
+    nachweis.tier_laut_nachweis = request.form.get('tier_laut_nachweis', '').strip()[:100] or None
+    nachweis.chipnummer = request.form.get('chipnummer', '').strip()[:30] or None
+    return None
+
+
+@app.route('/hund/<int:hund_id>/haftpflicht/speichern', methods=['POST'])
+def haftpflicht_speichern(hund_id):
+    hund = Hund.query.get_or_404(hund_id)
+    sha256 = request.form.get('sha256', '')
+    endung = request.form.get('endung', '')
+    try:
+        if not os.path.exists(nachweise.pfad(sha256, endung)):
+            raise nachweise.NachweisFehler('Die hochgeladene Datei wurde nicht gefunden.')
+    except nachweise.NachweisFehler as e:
+        flash(f'{e} Bitte erneut hochladen.', 'error')
+        return redirect(url_for('haftpflicht', hund_id=hund.id))
+
+    nachweis = HaftpflichtNachweis(hund_id=hund.id, datei_sha256=sha256, datei_endung=endung,
+                                   original_name=request.form.get('original_name', '')[:255] or None)
+    fehler = _nachweis_angaben(nachweis)
+    if fehler:
+        flash(fehler, 'error')
+        return render_template('haftpflicht_angaben.html', hund=hund, nachweis=None,
+                               vorschlag=request.form, warnungen=[], sha256=sha256, endung=endung,
+                               original_name=nachweis.original_name, text_erkannt=False)
+    db.session.add(nachweis)
+    db.session.commit()
+    flash(f'Haftpflicht-Nachweis für {hund.name} gespeichert (gültig bis {format_datum(nachweis.gueltig_bis)}).', 'success')
+    return redirect(url_for('haftpflicht', hund_id=hund.id))
+
+
+@app.route('/nachweis/<int:nachweis_id>/bearbeiten', methods=['GET', 'POST'])
+def nachweis_bearbeiten(nachweis_id):
+    """Angaben korrigieren - die Datei selbst bleibt unverändert."""
+    nachweis = HaftpflichtNachweis.query.get_or_404(nachweis_id)
+    if request.method == 'POST':
+        fehler = _nachweis_angaben(nachweis)
+        if fehler:
+            flash(fehler, 'error')
+        else:
+            db.session.commit()
+            flash('Angaben zum Nachweis aktualisiert.', 'success')
+            return redirect(url_for('haftpflicht', hund_id=nachweis.hund_id))
+    vorschlag = {
+        'gueltig_bis': nachweis.gueltig_bis, 'ausgestellt_am': nachweis.ausgestellt_am,
+        'versicherer': nachweis.versicherer, 'vertragsnummer': nachweis.vertragsnummer,
+        'tier': nachweis.tier_laut_nachweis, 'chipnummer': nachweis.chipnummer,
+    }
+    return render_template('haftpflicht_angaben.html', hund=nachweis.hund, nachweis=nachweis,
+                           vorschlag=vorschlag, warnungen=[], sha256=nachweis.datei_sha256,
+                           endung=nachweis.datei_endung, original_name=nachweis.original_name,
+                           text_erkannt=False)
+
+
+@app.route('/nachweis/<int:nachweis_id>/datei')
+def nachweis_datei(nachweis_id):
+    nachweis = HaftpflichtNachweis.query.get_or_404(nachweis_id)
+    return _sende_nachweis(nachweis.datei_sha256, nachweis.datei_endung, nachweis.original_name)
+
+
+@app.route('/nachweis/vorschau/<sha256>.<endung>')
+def nachweis_vorschau(sha256, endung):
+    """Gerade hochgeladene Datei ansehen, bevor die Angaben gespeichert sind."""
+    return _sende_nachweis(sha256, endung, None)
+
+
+def _sende_nachweis(sha256, endung, original_name):
+    try:
+        datei_pfad = nachweise.pfad(sha256, endung)
+    except nachweise.NachweisFehler:
+        return 'Nicht gefunden', 404
+    if not os.path.exists(datei_pfad):
+        return 'Die Datei fehlt - bitte unter "Sicherungen" einen Stand wiederherstellen.', 404
+    return send_file(datei_pfad, mimetype=nachweise.mimetype(endung),
+                     download_name=original_name or f'haftpflicht-nachweis.{endung}')
+
+
 def parse_datum(datum_string):
     """Parst einen Datum-String in ein date-Objekt"""
     if not datum_string:
@@ -297,19 +460,24 @@ def export_excel():
                 elif status == 'abgelaufen':
                     cell.fill = red_fill
             
-            haftpflicht_cell = ws.cell(row=row, column=10, value='Ja' if hund.haftpflicht_gueltig else 'Nein')
+            nachweis = hund.aktueller_nachweis
+            if nachweis:
+                # Mit Nachweis: Gültigkeitsdatum, gefärbt wie die Impfungen
+                haftpflicht_cell = ws.cell(row=row, column=10, value=f'bis {format_datum(nachweis.gueltig_bis)}')
+                haftpflicht_status = get_status(nachweis.gueltig_bis)
+                haftpflicht_cell.fill = {'gueltig': green_fill, 'bald-ablaufend': orange_fill}.get(haftpflicht_status, red_fill)
+            else:
+                haftpflicht_cell = ws.cell(row=row, column=10,
+                                           value='Ja (ohne Nachweis)' if hund.haftpflicht_gueltig else 'Nein')
+                haftpflicht_cell.fill = orange_fill if hund.haftpflicht_gueltig else red_fill
             haftpflicht_cell.border = thin_border
             haftpflicht_cell.alignment = Alignment(horizontal='center')
-            if hund.haftpflicht_gueltig:
-                haftpflicht_cell.fill = green_fill
-            else:
-                haftpflicht_cell.fill = red_fill
             
             ws.cell(row=row, column=11, value=hund.bemerkung or '').border = thin_border
             row += 1
     
     # Spaltenbreiten anpassen
-    column_widths = [15, 15, 7, 20, 12, 15, 12, 12, 12, 12, 30]
+    column_widths = [15, 15, 7, 20, 12, 15, 12, 12, 12, 18, 30]
     for i, width in enumerate(column_widths, 1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = width
     

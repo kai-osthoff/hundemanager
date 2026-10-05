@@ -17,8 +17,14 @@ Vor jedem Update werden Datenbank und Programm automatisch gesichert und
 geprüft. Klappt die Sicherung nicht, wird das Update gar nicht erst gestartet.
 Startet die neue Version nicht richtig, wird automatisch alles wiederhergestellt.
 
+HAFTPFLICHT-NACHWEIS
+In der Übersicht beim Hund in der Spalte "Haftpflicht" klicken, das PDF der
+Versicherung (oder ein Foto) hochladen, die erkannten Angaben prüfen, speichern.
+Alle Nachweise bleiben dauerhaft gespeichert und werden mitgesichert.
+
 DEINE DATEN
-Alle Daten liegen in der Datei instance\hundemanager.db.
+Alle Daten liegen in der Datei instance\hundemanager.db,
+die Nachweise im Ordner instance\nachweise.
 Der Hundemanager sichert sie automatisch einmal täglich und vor jedem Update -
 im Programmordner (instance\backup) und zusätzlich in
 Dokumente\Hundemanager-Backups.

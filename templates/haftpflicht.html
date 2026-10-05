@@ -1,0 +1,72 @@
+<!-- templates/haftpflicht.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="actions">
+    <a href="{{ url_for('index') }}" class="btn btn-secondary">← Zur Übersicht</a>
+</div>
+
+<div class="form-container" style="max-width: 900px;">
+    <h2>Haftpflicht – {{ hund.name }}</h2>
+    <p style="color: #6c757d; margin-bottom: 20px;">Besitzer: <strong>{{ hund.besitzer.vollstaendiger_name }}</strong></p>
+
+    {% set aktuell = hund.aktueller_nachweis %}
+    {% if aktuell %}
+        <p>Aktuell nachgewiesen bis
+            <span class="status-cell status-{{ get_status(aktuell.gueltig_bis) }}">{{ aktuell.gueltig_bis|format_datum }}</span>
+        </p>
+    {% elif hund.haftpflicht_gueltig %}
+        <p><span class="badge badge-success">Ja</span> – bisher nur angekreuzt, <strong>noch kein Nachweis hinterlegt</strong>.</p>
+    {% else %}
+        <p><span class="badge badge-danger">Kein Nachweis</span></p>
+    {% endif %}
+
+    <h3 style="margin-top: 25px;">Neuen Nachweis hochladen</h3>
+    <p style="color: #6c757d; font-size: 0.9rem; margin-bottom: 10px;">
+        PDF der Versicherung oder ein Foto (JPG/PNG). Bei PDFs werden die Angaben automatisch erkannt.
+    </p>
+    <form action="{{ url_for('haftpflicht_hochladen', hund_id=hund.id) }}" method="POST" enctype="multipart/form-data">
+        <div class="form-group">
+            <input type="file" name="datei" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Hochladen</button>
+    </form>
+</div>
+
+<div class="table-container" style="max-width: 900px; margin: 30px auto;">
+    <table>
+        <thead>
+            <tr>
+                <th>Gültig bis</th>
+                <th>Ausgestellt</th>
+                <th>Versicherer</th>
+                <th>Vertragsnummer</th>
+                <th>Hochgeladen</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for n in hund.nachweise %}
+            <tr>
+                <td><span class="status-cell status-{{ get_status(n.gueltig_bis) }}">{{ n.gueltig_bis|format_datum }}</span></td>
+                <td>{{ n.ausgestellt_am|format_datum }}</td>
+                <td>{{ n.versicherer or '-' }}</td>
+                <td>{{ n.vertragsnummer or '-' }}</td>
+                <td>{{ n.hochgeladen_am.strftime('%d.%m.%Y %H:%M') }}</td>
+                <td>
+                    <div class="person-actions">
+                        <a href="{{ url_for('nachweis_datei', nachweis_id=n.id) }}" target="_blank" class="btn btn-primary btn-sm">📄 Ansehen</a>
+                        <a href="{{ url_for('nachweis_bearbeiten', nachweis_id=n.id) }}" class="btn btn-secondary btn-sm">✏️</a>
+                    </div>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" style="color: #6c757d; font-style: italic;">Noch keine Nachweise hinterlegt</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<p style="text-align: center; color: #6c757d; font-size: 0.85rem;">
+    Alle Nachweise bleiben dauerhaft gespeichert und werden mitgesichert – auch abgelaufene.
+</p>
+{% endblock %}

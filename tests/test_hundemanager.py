@@ -12,6 +12,7 @@ import importlib.util
 import io
 import json
 import locale
+import re
 import os
 import shutil
 import socket
@@ -23,9 +24,11 @@ import threading
 import time
 import unittest
 import urllib.error
+import urllib.parse
 import urllib.request
 import zipfile
 from contextlib import closing
+from datetime import date, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -120,6 +123,60 @@ def release_zip(version, aenderungen=None):
             if inhalt is not None:
                 zf.writestr(praefix + rel, inhalt)
     return puffer.getvalue()
+
+
+def test_pdf(zeilen):
+    """Minimales, gültiges PDF mit Textebene (erfundene Daten - nie echte Dokumente im Repo)."""
+    inhalt = 'BT /F1 11 Tf 50 800 Td 14 TL\n' + ''.join(
+        '(' + z.replace('\\', '\\\\').replace('(', '\\(').replace(')', '\\)') + ') Tj T*\n' for z in zeilen) + 'ET'
+    inhalt = inhalt.encode('cp1252')
+    objekte = [
+        b'<< /Type /Catalog /Pages 2 0 R >>',
+        b'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+        b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R '
+        b'/Resources << /Font << /F1 5 0 R >> >> >>',
+        b'<< /Length ' + str(len(inhalt)).encode() + b' >>\nstream\n' + inhalt + b'\nendstream',
+        b'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
+    ]
+    pdf = bytearray(b'%PDF-1.4\n')
+    positionen = []
+    for nr, obj in enumerate(objekte, 1):
+        positionen.append(len(pdf))
+        pdf += f'{nr} 0 obj\n'.encode() + obj + b'\nendobj\n'
+    xref = len(pdf)
+    pdf += f'xref\n0 {len(objekte) + 1}\n0000000000 65535 f \n'.encode()
+    for pos in positionen:
+        pdf += f'{pos:010d} 00000 n \n'.encode()
+    pdf += f'trailer\n<< /Size {len(objekte) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n'.encode()
+    return bytes(pdf)
+
+
+MONATSNAMEN = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August',
+               'September', 'Oktober', 'November', 'Dezember']
+
+
+def bestaetigung_zeilen(ausgestellt, tier='Bello'):
+    """Aufbau wie eine echte Versicherungsbestätigung - mit erfundenen Daten,
+    in der durcheinandergewürfelten Reihenfolge, in der pypdf den Text liefert."""
+    return [
+        'Ihre Tierhalter-Haftpflichtversicherung XY-1234567890 (bitte stets angeben)',
+        'Bestaetigung ueber das Bestehen einer Hundehalter-Haftpflichtversicherung',
+        'Diese Bestaetigung ist befristet auf die Dauer',
+        'eines Jahres ab Ausstellungsdatum.',
+        f'1. Tier: {tier}, Labrador; mit Chipnummer 276000000000001; Geburtsdatum: 01.02.2020',
+        'Musterversicherung Versicherungs-Aktiengesellschaft',
+        'Musterversicherung Versicherungs-AG, 12345 Musterstadt',
+        'Max Mustermann',
+        'Datum',
+        f'{ausgestellt.day:02d}. {MONATSNAMEN[ausgestellt.month - 1]} {ausgestellt.year}',
+    ]
+
+
+def multipart(feldname, dateiname, daten):
+    grenze = 'hundemanagertestgrenze'
+    koerper = (f'--{grenze}\r\nContent-Disposition: form-data; name="{feldname}"; filename="{dateiname}"\r\n'
+               f'Content-Type: application/octet-stream\r\n\r\n').encode() + daten + f'\r\n--{grenze}--\r\n'.encode()
+    return koerper, f'multipart/form-data; boundary={grenze}'
 
 
 class GitHubNachbau:
@@ -227,6 +284,16 @@ class SicherungTests(unittest.TestCase):
         ordner, _ = self.backup.erstelle_backup('manuell', '5.2.0')
         shutil.copytree(ordner, ordner + '_2' + self.backup.UNVOLLSTAENDIG)
         self.assertEqual([b['name'] for b in self.backup.liste_backups()], [os.path.basename(ordner)])
+
+    def test_sicherung_ohne_manifest_gilt_als_unvollstaendig(self):
+        # So sieht eine Sicherung aus, die mittendrin abgebrochen wurde (Strom weg o.ä.)
+        ordner, _ = self.backup.erstelle_backup('manuell', '5.2.0')
+        abgebrochen = os.path.join(self.backup.BACKUP_DIR, '2099-01-01_000000_v5.2.0_manuell')
+        shutil.copytree(ordner, abgebrochen)
+        os.remove(os.path.join(abgebrochen, 'manifest.json'))
+        self.assertNotIn(os.path.basename(abgebrochen), [b['name'] for b in self.backup.liste_backups()])
+        with self.assertRaises(self.backup.BackupFehler):
+            self.backup.finde_backup(os.path.basename(abgebrochen))
 
     def test_wiederherstellen_sichert_vorher_den_aktuellen_stand(self):
         ordner, _ = self.backup.erstelle_backup('manuell', '5.2.0')
@@ -397,7 +464,8 @@ class UpdateTests(unittest.TestCase):
         backup = lade_modul(os.path.join(self.app_dir, 'backup.py'), f'backup_{id(self)}')
         for basis in (os.path.join(self.app_dir, 'instance', 'backup'), self.zweiter_ort):
             manifest = backup.pruefe_backup(os.path.join(basis, sicherungen[0]))
-            self.assertEqual(manifest['datensaetze'], {'hund': 4, 'person': 3})
+            self.assertEqual(manifest['datensaetze']['hund'], 4)
+            self.assertEqual(manifest['datensaetze']['person'], 3)
         self.assertFalse(os.path.exists(os.path.join(self.app_dir, 'instance', 'update_laeuft.json')))
         self.assertEqual(lies_bytes(os.path.join(self.app_dir, 'START.bat')), self.start_bat_vorher)
         self.assertNotIn('hat nicht geklappt', self.seite())
@@ -508,6 +576,184 @@ class UpdateTests(unittest.TestCase):
         self.assertIn('neu öffnen', self.seite())
         # Die neue Version legt sofort ihre erste geprüfte Sicherung an
         self.assertEqual(len(self.sicherungen('taeglich')), 1)
+
+
+# --- Haftpflicht-Nachweise ---
+
+class NachweisTests(unittest.TestCase):
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.app_dir = installation_anlegen(os.path.join(self.tmp.name, 'Hundemanager'), '5.1.2')
+        self.zweiter_ort = os.path.join(self.tmp.name, 'Dokumente', 'Hundemanager-Backups')
+        os.environ['HUNDEMANAGER_BACKUP_ZWEITER_ORT'] = self.zweiter_ort
+        # nachweise.py importiert backup - beide aus der Testinstallation laden
+        sys.path.insert(0, self.app_dir)
+        for name in ('backup', 'nachweise'):
+            sys.modules.pop(name, None)
+        import backup, nachweise
+        self.backup, self.nachweise = backup, nachweise
+        db_anlegen(backup.DB_PFAD)
+
+    def tearDown(self):
+        sys.path.remove(self.app_dir)
+        for name in ('backup', 'nachweise'):
+            sys.modules.pop(name, None)
+        os.environ.pop('HUNDEMANAGER_BACKUP_ZWEITER_ORT', None)
+        self.tmp.cleanup()
+
+    def test_angaben_werden_erkannt(self):
+        pdf = test_pdf(bestaetigung_zeilen(date(2026, 10, 5)))
+        vorschlag = self.nachweise.angaben_vorschlagen(self.nachweise.pdf_text(pdf))
+        self.assertEqual(vorschlag['versicherer'], 'Musterversicherung Versicherungs-Aktiengesellschaft')
+        self.assertEqual(vorschlag['vertragsnummer'], 'XY-1234567890')
+        self.assertEqual(vorschlag['ausgestellt_am'], date(2026, 10, 5))  # nicht das Geburtsdatum
+        self.assertEqual(vorschlag['gueltig_bis'], date(2027, 10, 4))     # ein Jahr ab Ausstellung
+        self.assertEqual(vorschlag['tier'], 'Bello')
+        self.assertEqual(vorschlag['chipnummer'], '276000000000001')
+
+    def test_ausdrueckliches_gueltig_bis(self):
+        text = 'Muster Versicherung AG\nDatum 01.03.2026\nDer Versicherungsschutz ist gültig bis 31.12.2026.'
+        self.assertEqual(self.nachweise.angaben_vorschlagen(text)['gueltig_bis'], date(2026, 12, 31))
+
+    def test_ohne_text_keine_vorschlaege(self):
+        self.assertEqual(self.nachweise.angaben_vorschlagen(''), {})
+        self.assertEqual(self.nachweise.pdf_text(b'%PDF-kaputt'), '')
+
+    def test_speichern_ist_unveraenderlich_und_geprueft(self):
+        pdf = test_pdf(['Test'])
+        sha, endung = self.nachweise.speichern(pdf)
+        self.assertEqual((sha, endung), self.nachweise.speichern(pdf))  # gleicher Inhalt, gleiche Datei
+        self.assertEqual(lies_bytes(self.nachweise.pfad(sha, endung)), pdf)
+        self.assertEqual(os.listdir(self.nachweise.NACHWEIS_DIR), [f'{sha}.pdf'])
+        self.assertEqual(self.nachweise.speichern(b'\xff\xd8\xff\xe0foto')[1], 'jpg')
+        for falsch in (b'', b'MZ ausfuehrbar', b'<html>'):
+            with self.assertRaises(self.nachweise.NachweisFehler):
+                self.nachweise.speichern(falsch)
+        with self.assertRaises(self.nachweise.NachweisFehler):
+            self.nachweise.pfad('../../app', 'pdf')
+
+    def test_nachweise_sind_in_jeder_sicherung(self):
+        sha, endung = self.nachweise.speichern(test_pdf(['Nachweis A']))
+        name = f'{sha}.{endung}'
+        ordner, hinweis = self.backup.erstelle_backup('manuell', '5.1.2')
+        self.assertIsNone(hinweis)
+        self.assertEqual(self.backup.pruefe_backup(ordner)['nachweise'], [name])
+        for basis in (self.backup.BACKUP_DIR, self.zweiter_ort):
+            self.assertTrue(os.path.exists(os.path.join(basis, 'nachweise', name)))
+        # Eine zweite Sicherung legt die Datei nicht noch einmal ab
+        self.backup.erstelle_backup('manuell', '5.1.2')
+        self.assertEqual(os.listdir(os.path.join(self.backup.BACKUP_DIR, 'nachweise')), [name])
+
+    def test_verlorener_nachweis_wird_wiederhergestellt(self):
+        sha, endung = self.nachweise.speichern(test_pdf(['Nachweis B']))
+        ordner, _ = self.backup.erstelle_backup('manuell', '5.1.2')
+        os.remove(self.nachweise.pfad(sha, endung))
+        self.backup.datenbank_wiederherstellen(ordner, '5.1.2')
+        self.assertEqual(self.backup._sha256(self.nachweise.pfad(sha, endung)), sha)
+
+    def test_beschaedigter_nachweis_wird_gemeldet_und_nicht_ueberschrieben(self):
+        sha, endung = self.nachweise.speichern(test_pdf(['Nachweis C']))
+        self.backup.erstelle_backup('manuell', '5.1.2')
+        with open(self.nachweise.pfad(sha, endung), 'r+b') as f:
+            f.write(b'XXXX')
+        ordner, hinweis = self.backup.erstelle_backup('manuell', '5.1.2')
+        self.assertIn('beschädigt', hinweis)
+        # Die intakte Kopie in den Sicherungen bleibt intakt
+        self.backup.pruefe_backup(ordner)
+
+    def test_beschaedigte_ablage_macht_sicherung_ungueltig(self):
+        sha, endung = self.nachweise.speichern(test_pdf(['Nachweis D']))
+        ordner, _ = self.backup.erstelle_backup('manuell', '5.1.2')
+        with open(os.path.join(self.backup.BACKUP_DIR, 'nachweise', f'{sha}.{endung}'), 'r+b') as f:
+            f.write(b'XXXX')
+        with self.assertRaises(self.backup.BackupFehler):
+            self.backup.pruefe_backup(ordner)
+
+
+class HaftpflichtOberflaecheTests(unittest.TestCase):
+    """Hochladen, Prüfen, Speichern und Ansehen über die echte Oberfläche."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.app_dir = installation_anlegen(os.path.join(self.tmp.name, 'Hundemanager'), '5.1.2')
+        self.db = os.path.join(self.app_dir, 'instance', 'hundemanager.db')
+        db_anlegen(self.db)
+        self.port = freier_port()
+        self.log_pfad = os.path.join(self.tmp.name, 'ausgabe.log')
+        env = dict(os.environ, HUNDEMANAGER_PORT=str(self.port), HUNDEMANAGER_KEIN_BROWSER='1',
+                   HUNDEMANAGER_RELEASES_URL='http://127.0.0.1:9/gibt-es-nicht',
+                   HUNDEMANAGER_BACKUP_ZWEITER_ORT=os.path.join(self.tmp.name, 'Dokumente'))
+        env.pop('HUNDEMANAGER_LAUNCHER', None)
+        optionen = {'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP} if WINDOWS else {'start_new_session': True}
+        self.log = open(self.log_pfad, 'w', encoding='utf-8')
+        self.prozess = subprocess.Popen([sys.executable, 'app.py'], cwd=self.app_dir, env=env,
+                                        stdout=self.log, stderr=subprocess.STDOUT, **optionen)
+        self.browser = urllib.request.build_opener(
+            urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+        ende = time.time() + 60
+        while time.time() < ende:
+            try:
+                self.browser.open(f'http://127.0.0.1:{self.port}/api/version', timeout=5).read()
+                return
+            except OSError:
+                time.sleep(0.5)
+        self.fail('Hundemanager antwortet nicht')
+
+    def tearDown(self):
+        prozess_beenden(self.prozess)
+        self.log.close()
+        self.tmp.cleanup()
+
+    def oeffne(self, pfad, daten=None, typ=None):
+        anfrage = urllib.request.Request(f'http://127.0.0.1:{self.port}{pfad}', data=daten,
+                                         method='POST' if daten is not None else 'GET')
+        if typ:
+            anfrage.add_header('Content-Type', typ)
+        with self.browser.open(anfrage, timeout=30) as a:
+            return a.read()
+
+    def test_nachweis_hochladen_pruefen_speichern_ansehen(self):
+        heute = date.today()
+        pdf = test_pdf(bestaetigung_zeilen(heute))
+        koerper, typ = multipart('datei', 'Bestätigung Haftpflicht.pdf', pdf)
+
+        seite = self.oeffne('/hund/1/haftpflicht/hochladen', koerper, typ).decode('utf-8')
+        self.assertIn('Angaben wurden aus dem Dokument erkannt', seite)
+        self.assertIn('XY-1234567890', seite)
+        gueltig_bis = heute.replace(year=heute.year + 1) - timedelta(days=1) if not (heute.month == 2 and heute.day == 29) \
+            else date(heute.year + 1, 2, 28)
+        self.assertIn(gueltig_bis.isoformat(), seite)
+        sha = re.search(r'name="sha256" value="([0-9a-f]{64})"', seite).group(1)
+
+        formular = urllib.parse.urlencode({
+            'sha256': sha, 'endung': 'pdf', 'original_name': 'Bestätigung Haftpflicht.pdf',
+            'gueltig_bis': gueltig_bis.isoformat(), 'ausgestellt_am': heute.isoformat(),
+            'versicherer': 'Musterversicherung', 'vertragsnummer': 'XY-1234567890',
+            'tier_laut_nachweis': 'Bello', 'chipnummer': '276000000000001',
+        }).encode()
+        seite = self.oeffne('/hund/1/haftpflicht/speichern', formular).decode('utf-8')
+        self.assertIn('Haftpflicht-Nachweis für Bello gespeichert', seite)
+
+        uebersicht = self.oeffne('/').decode('utf-8')
+        self.assertIn(f'📄 {gueltig_bis.strftime("%d.%m.%Y")}', uebersicht)
+        self.assertEqual(self.oeffne('/nachweis/1/datei'), pdf)
+
+        # Excel-Export zeigt die Gültigkeit
+        import openpyxl
+        mappe = openpyxl.load_workbook(io.BytesIO(self.oeffne('/export/excel')))
+        werte = [z[9] for z in mappe.active.iter_rows(min_row=2, values_only=True)]
+        self.assertIn(f'bis {gueltig_bis.strftime("%d.%m.%Y")}', werte)
+
+        # Falscher Hund im Dokument -> Warnung
+        koerper, typ = multipart('datei', 'anderer.pdf', test_pdf(bestaetigung_zeilen(heute, tier='Rocky')))
+        self.assertIn('Rocky', self.oeffne('/hund/1/haftpflicht/hochladen', koerper, typ).decode('utf-8'))
+
+    def test_falsche_datei_wird_abgelehnt(self):
+        koerper, typ = multipart('datei', 'virus.exe', b'MZ\x90\x00')
+        seite = self.oeffne('/hund/1/haftpflicht/hochladen', koerper, typ).decode('utf-8')
+        self.assertIn('Bitte ein PDF oder ein Foto', seite)
+        self.assertFalse(os.path.exists(os.path.join(self.app_dir, 'instance', 'nachweise')))
 
 
 if __name__ == '__main__':

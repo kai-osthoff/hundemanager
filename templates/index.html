@@ -78,11 +78,17 @@
                         <td><span class="status-cell status-{{ get_status(hund.gueltig_bbpi) }}">{{ hund.gueltig_bbpi|format_datum }}</span></td>
                         <td><span class="status-cell status-{{ get_status(hund.gueltig_t) }}">{{ hund.gueltig_t|format_datum }}</span></td>
                         <td>
-                            {% if hund.haftpflicht_gueltig %}
-                                <span class="badge badge-success">Ja</span>
+                            {% set nachweis = hund.aktueller_nachweis %}
+                            <a href="{{ url_for('haftpflicht', hund_id=hund.id) }}" style="text-decoration: none;"
+                               title="Haftpflicht-Nachweise ansehen / hochladen">
+                            {% if nachweis %}
+                                <span class="status-cell status-{{ get_status(nachweis.gueltig_bis) }}">📄 {{ nachweis.gueltig_bis|format_datum }}</span>
+                            {% elif hund.haftpflicht_gueltig %}
+                                <span class="badge badge-success">Ja</span> <small style="color: #856404;">ohne Nachweis</small>
                             {% else %}
                                 <span class="badge badge-danger">Nein</span>
                             {% endif %}
+                            </a>
                         </td>
                         <td class="bemerkung-cell" title="{{ hund.bemerkung or '' }}">{{ hund.bemerkung or '-' }}</td>
                         <td>
