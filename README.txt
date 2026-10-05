@@ -18,8 +18,9 @@ geprüft. Klappt die Sicherung nicht, wird das Update gar nicht erst gestartet.
 Startet die neue Version nicht richtig, wird automatisch alles wiederhergestellt.
 
 HAFTPFLICHT-NACHWEIS
-In der Übersicht beim Hund in der Spalte "Haftpflicht" klicken, das PDF der
-Versicherung (oder ein Foto) hochladen, die erkannten Angaben prüfen, speichern.
+In der Übersicht auf der Karte des Hundes bei "Haftpflicht" auf "Hochladen"
+klicken, das PDF der Versicherung (oder ein Foto) hochladen, die erkannten
+Angaben prüfen, speichern.
 Alle Nachweise bleiben dauerhaft gespeichert und werden mitgesichert.
 
 DEINE DATEN

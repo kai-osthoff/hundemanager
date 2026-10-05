@@ -111,23 +111,103 @@ app.jinja_env.filters['format_datum'] = format_datum
 app.jinja_env.filters['iso_datum'] = iso_datum
 app.jinja_env.globals['get_status'] = get_status
 
+IMPFUNGEN = [
+    ('SHP/DAP/DHP', 'gueltig_shp_dap_dhp'),
+    ('L', 'gueltig_l'),
+    ('BbPi', 'gueltig_bbpi'),
+    ('T', 'gueltig_t'),
+]
+GESAMT_TEXT = {
+    'ok': 'Alles gültig',
+    'bald': 'Bald fällig',
+    'abgelaufen': 'Abgelaufen',
+    'unvollstaendig': 'Unvollständig',
+}
+
+
+def hund_ansicht(hund):
+    """Alles, was eine Hundekarte braucht - inklusive Gesamtstatus für Farbe und Filter."""
+    heute = date.today()
+    impfungen = []
+    for name, feld in IMPFUNGEN:
+        datum = getattr(hund, feld)
+        status = get_status(datum)
+        hinweis = ''
+        if status == 'abgelaufen':
+            hinweis = 'abgelaufen'
+        elif status == 'bald-ablaufend':
+            tage = (datum - heute).days
+            hinweis = 'heute' if tage == 0 else ('morgen' if tage == 1 else f'in {tage} Tagen')
+        impfungen.append({'name': name, 'datum': datum, 'status': status, 'hinweis': hinweis})
+
+    nachweis = hund.aktueller_nachweis
+    if nachweis:
+        haftpflicht = get_status(nachweis.gueltig_bis)
+    elif hund.haftpflicht_gueltig:
+        haftpflicht = 'ohne-nachweis'
+    else:
+        haftpflicht = 'keine-angabe'
+
+    stati = [i['status'] for i in impfungen] + [haftpflicht]
+    if 'abgelaufen' in stati:
+        gesamt = 'abgelaufen'
+    elif 'bald-ablaufend' in stati:
+        gesamt = 'bald'
+    elif 'keine-angabe' in stati or 'ohne-nachweis' in stati:
+        gesamt = 'unvollstaendig'
+    else:
+        gesamt = 'ok'
+
+    return {
+        'hund': hund,
+        'impfungen': impfungen,
+        'nachweis': nachweis,
+        'haftpflicht': haftpflicht,
+        'gesamt': gesamt,
+        'gesamt_text': GESAMT_TEXT[gesamt],
+    }
+
+
 @app.route('/')
 def index():
-    
-    show_all = request.args.get('all') == '1'
+    ansicht = request.args.get('ansicht', 'aktiv')
+    if request.args.get('all') == '1':  # alte Links aus v5.1.1 und früher
+        ansicht = 'alle'
+    if ansicht not in ('aktiv', 'handlungsbedarf', 'alle'):
+        ansicht = 'aktiv'
 
-    query = Person.query
-
-    if not show_all:
-        query = query.filter_by(aktiv=True)
-
-    personen = query.order_by(
+    alle_personen = Person.query.order_by(
         Person.aktiv.desc(),
         func.lower(Person.nachname),
         func.lower(Person.vorname)
     ).all()
+    aktive = [p for p in alle_personen if p.aktiv]
+    pausierte = [p for p in alle_personen if not p.aktiv]
 
-    return render_template('index.html', personen=personen)
+    gruppen = []
+    for person in (alle_personen if ansicht == 'alle' else aktive):
+        hunde = [hund_ansicht(h) for h in sorted(person.hunde, key=lambda h: h.name.lower())]
+        if ansicht == 'handlungsbedarf':
+            hunde = [h for h in hunde if h['gesamt'] != 'ok']
+            if not hunde:
+                continue
+        gruppen.append({'person': person, 'hunde': hunde})
+
+    # Kennzahlen immer über die aktiven Halter
+    aktive_hunde = [hund_ansicht(h) for p in aktive for h in p.hunde]
+    impf_stati = [i['status'] for h in aktive_hunde for i in h['impfungen']]
+    kennzahlen = {
+        'hunde': len(aktive_hunde),
+        'bald': impf_stati.count('bald-ablaufend'),
+        'abgelaufen': impf_stati.count('abgelaufen'),
+        'ohne_haftpflicht': sum(1 for h in aktive_hunde if h['haftpflicht'] not in ('gueltig', 'bald-ablaufend')),
+        'handlungsbedarf': sum(1 for h in aktive_hunde if h['gesamt'] != 'ok'),
+    }
+
+    return render_template('index.html', gruppen=gruppen, ansicht=ansicht,
+                           pausierte=pausierte if ansicht != 'alle' else [],
+                           anzahl_pausiert=len(pausierte), kennzahlen=kennzahlen,
+                           gibt_personen=bool(alle_personen))
 
 @app.route('/person/neu', methods=['GET', 'POST'])
 def person_neu():
@@ -501,10 +581,12 @@ def person_toggle_aktiv(person_id):
     person.aktiv = not person.aktiv
     db.session.commit()
 
-    status = "aktiviert" if person.aktiv else "deaktiviert"
-    flash(f'Person wurde {status}.', 'success')
+    if person.aktiv:
+        flash(f'{person.vollstaendiger_name} ist wieder aktiv.', 'success')
+    else:
+        flash(f'{person.vollstaendiger_name} ist pausiert – zu finden unten unter „Pausiert“.', 'success')
 
-    return redirect(url_for('index'))
+    return redirect(request.referrer or url_for('index'))
 
 
 def impfstatus_farbe(hund):
@@ -716,7 +798,7 @@ def migriere_datenbank():
 def selbsttest():
     """Lädt die wichtigsten Seiten einmal intern - fällt etwas um, gilt das Update als fehlgeschlagen."""
     with app.test_client() as client:
-        for pfad in ('/', '/?all=1', '/sicherungen', '/export/excel'):
+        for pfad in ('/', '/?ansicht=handlungsbedarf', '/?ansicht=alle', '/sicherungen', '/export/excel'):
             antwort = client.get(pfad)
             if antwort.status_code != 200:
                 raise RuntimeError(f'Selbsttest: {pfad} liefert {antwort.status_code}')

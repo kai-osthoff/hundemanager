@@ -77,12 +77,12 @@ kannst du selbst sichern oder einen älteren Stand zurückholen.
 
 ## Haftpflicht-Nachweis hinterlegen
 
-1. In der Übersicht beim Hund in der Spalte **Haftpflicht** klicken.
-2. Unter **„Neuen Nachweis hochladen“** das PDF der Versicherung (oder ein Foto) auswählen → **Hochladen**.
+1. In der Übersicht auf der Karte des Hundes auf **„Hochladen“** klicken (in der Haftpflicht-Zeile).
+2. Das PDF der Versicherung (oder ein Foto) auswählen → **Hochladen**.
 3. Bei PDFs füllt der Hundemanager die Angaben selbst aus (Versicherer, Vertragsnummer, gültig bis …).
    **Kurz prüfen** und **Speichern**. Passt der Hundename im Dokument nicht, erscheint eine Warnung.
 
-In der Übersicht steht danach **📄 gültig bis …** – grün, orange (läuft bald ab) oder rot (abgelaufen).
+Auf der Karte steht danach **„Haftpflicht bis …“** – grün, orange (läuft bald ab) oder rot (abgelaufen).
 Alle Nachweise bleiben dauerhaft gespeichert, auch abgelaufene, und sind in jeder Sicherung enthalten.
 
 ## Wenn etwas nicht klappt

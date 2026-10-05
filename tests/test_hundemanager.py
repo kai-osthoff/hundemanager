@@ -760,7 +760,8 @@ class HaftpflichtOberflaecheTests(unittest.TestCase):
         self.assertIn('Haftpflicht-Nachweis für Bello gespeichert', seite)
 
         uebersicht = self.oeffne('/').decode('utf-8')
-        self.assertIn(f'📄 {gueltig_bis.strftime("%d.%m.%Y")}', uebersicht)
+        self.assertIn(f'Haftpflicht bis {gueltig_bis.strftime("%d.%m.%Y")}', uebersicht)
+        self.assertIn('Nachweis ansehen', uebersicht)
         self.assertEqual(self.oeffne('/nachweis/1/datei'), pdf)
 
         # Excel-Export zeigt die Gültigkeit
@@ -772,6 +773,24 @@ class HaftpflichtOberflaecheTests(unittest.TestCase):
         # Falscher Hund im Dokument -> Warnung
         koerper, typ = multipart('datei', 'anderer.pdf', test_pdf(bestaetigung_zeilen(heute, tier='Rocky')))
         self.assertIn('Rocky', self.oeffne('/hund/1/haftpflicht/hochladen', koerper, typ).decode('utf-8'))
+
+    def test_uebersicht_filter_und_pausierte(self):
+        seite = self.oeffne('/').decode('utf-8')
+        for name in ('Bello', 'Luna', 'Rex', 'Fiete'):
+            self.assertIn(name, seite)
+        # Ohne Impfdaten ist bei allen etwas zu tun
+        self.assertIn('Handlungsbedarf (4)', seite)
+        self.assertIn('Rex', self.oeffne('/?ansicht=handlungsbedarf').decode('utf-8'))
+        self.assertIn('Bello', self.oeffne('/?all=1').decode('utf-8'))  # alte Links gehen weiter
+
+        # Der Fall aus der Praxis: alle pausiert -> nie "keine Einträge", sondern ein Weg zurück
+        for person_id in (1, 2, 3):
+            self.oeffne(f'/person/{person_id}/toggle_aktiv', b'')
+        seite = self.oeffne('/').decode('utf-8')
+        self.assertIn('Gerade ist niemand aktiv', seite)
+        self.assertIn('Pausiert (3)', seite)
+        self.assertNotIn('Noch keine Einträge', seite)
+        self.assertIn('Bello', self.oeffne('/?ansicht=alle').decode('utf-8'))
 
     def test_falsche_datei_wird_abgelehnt(self):
         koerper, typ = multipart('datei', 'virus.exe', b'MZ\x90\x00')

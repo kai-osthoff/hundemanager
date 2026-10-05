@@ -12,30 +12,54 @@
             padding: 0;
         }
         
+        /* Systemschriften: Windows 11 bringt Segoe UI Variable mit - keine Google Fonts,
+           damit die App offline läuft und nichts an Dritte sendet */
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background-color: #f5f7fa;
-            color: #333;
-            line-height: 1.6;
+            font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background-color: #EEF3EC;
+            color: #15201A;
+            line-height: 1.5;
         }
         
         .container {
-            max-width: 1400px;
+            max-width: 1240px;
             margin: 0 auto;
-            padding: 20px;
+            padding: 20px 24px;
         }
         
         header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #173B2C;
             color: white;
-            padding: 20px 0;
-            margin-bottom: 30px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 8px;
+        }
+        
+        header .container {
+            padding-top: 26px;
+            padding-bottom: 28px;
+            display: flex;
+            flex-direction: column;
+            gap: 22px;
+        }
+        
+        .kopf-zeile {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
         }
         
         header h1 {
-            text-align: center;
-            font-size: 2rem;
+            font-family: 'Segoe UI Variable Display', 'Segoe UI', system-ui, -apple-system, sans-serif;
+            font-size: 2.4rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            line-height: 1.1;
+        }
+        
+        header h1 a {
+            color: inherit;
+            text-decoration: none;
         }
         
         .flash-messages {
@@ -72,13 +96,12 @@
         }
         
         .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #173B2C;
             color: white;
         }
         
         .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+            background: #0F2A1F;
         }
         
         .btn-success {
@@ -242,8 +265,8 @@
         .form-group select:focus,
         .form-group textarea:focus {
             outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+            border-color: #173B2C;
+            box-shadow: 0 0 0 3px rgba(23, 59, 44, 0.15);
         }
         
         .form-group textarea {
@@ -374,8 +397,8 @@
             flex-wrap: wrap;
             padding: 16px 20px;
             margin-bottom: 20px;
-            background: #e8eaff;
-            border: 1px solid #667eea;
+            background: #E1EBE3;
+            border: 1px solid #173B2C;
             border-radius: 8px;
         }
 
@@ -424,10 +447,239 @@
             color: #6c757d;
         }
 
+        /* --- Übersicht (Design C "Hundeplatz") --- */
+        .btn-rund {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 46px;
+            padding: 0 20px;
+            border-radius: 999px;
+            font: inherit;
+            font-weight: 700;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .btn-hell { background: #C6F06A; color: #15201A; border: 0; }
+        .btn-hell:hover { background: #B4E04F; }
+        .btn-umriss { background: transparent; color: #FFFFFF; border: 1.5px solid #6E9381; font-weight: 600; }
+        .btn-umriss:hover { border-color: #FFFFFF; }
+
+        .kennzahlen {
+            list-style: none;
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 12px;
+        }
+        .kennzahl {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 16px 18px;
+            color: #D4E3DA;
+            font-size: 0.9rem;
+        }
+        .kennzahl strong {
+            display: block;
+            font-family: 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
+            font-weight: 800;
+            font-size: 2.1rem;
+            line-height: 1;
+            margin-bottom: 6px;
+            color: #FFFFFF;
+        }
+        .kennzahl-warn { background: #FFF1D6; color: #5C3800; }
+        .kennzahl-alarm { background: #FBE3E1; color: #7A1A13; }
+        .kennzahl-warn strong, .kennzahl-alarm strong { color: inherit; }
+
+        .leiste {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin: 8px 0 18px;
+        }
+        .leiste h2 {
+            font-family: 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+        .filter { display: flex; gap: 8px; flex-wrap: wrap; }
+        .filter a {
+            text-decoration: none;
+            padding: 9px 16px;
+            border-radius: 999px;
+            background: #FFFFFF;
+            color: #15201A;
+            border: 1px solid #C9D6CC;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        .filter a[aria-current="page"] { background: #15201A; color: #FFFFFF; border-color: #15201A; font-weight: 600; }
+
+        .halter { margin-bottom: 28px; }
+        .halter-kopf {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+        .halter-kopf h3 { font-size: 1.15rem; font-weight: 700; }
+        .halter-info { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .halter-aktionen { display: flex; gap: 6px; flex-wrap: wrap; }
+        .halter-aktionen form { display: inline; }
+        .knopf {
+            display: inline-flex;
+            align-items: center;
+            min-height: 40px;
+            padding: 0 14px;
+            border-radius: 10px;
+            border: 1px solid #C9D6CC;
+            background: #FFFFFF;
+            color: #15201A;
+            font: inherit;
+            font-size: 0.9rem;
+            font-weight: 500;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .knopf:hover { border-color: #15201A; }
+        .knopf-gefahr { color: #8E1F17; border-color: #E5C4C1; }
+        .knopf-gefahr:hover { border-color: #8E1F17; }
+        .etikett {
+            font-size: 0.8rem;
+            font-weight: 600;
+            padding: 3px 10px;
+            border-radius: 999px;
+            background: #E1EBE3;
+            color: #173B2C;
+        }
+        .etikett-grau { background: #E4E8E5; color: #4A514D; }
+
+        .hunde-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(min(330px, 100%), 1fr));
+            gap: 16px;
+        }
+        .hund-karte {
+            background: #FFFFFF;
+            border-radius: 20px;
+            padding: 22px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+        .hund-karte.status-bald { box-shadow: inset 0 0 0 2px #F0C060; }
+        .hund-karte.status-abgelaufen { box-shadow: inset 0 0 0 2px #D9726B; }
+        .hund-karte.ist-pausiert { opacity: 0.6; }
+        .hund-kopf { display: flex; align-items: center; gap: 14px; }
+        .avatar {
+            flex: none;
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 1.35rem;
+            background: #DCEBD9;
+            color: #173B2C;
+        }
+        .status-bald .avatar { background: #FFF1D6; color: #5C3800; }
+        .status-abgelaufen .avatar { background: #FBE3E1; color: #7A1A13; }
+        .status-unvollstaendig .avatar { background: #E4E8E5; color: #4A514D; }
+        .hund-name { flex: 1; min-width: 0; }
+        .hund-name h4 {
+            font-family: 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
+            font-size: 1.45rem;
+            font-weight: 800;
+            line-height: 1.1;
+        }
+        .hund-name div { font-size: 0.875rem; color: #55625A; }
+        .gesamt {
+            flex: none;
+            font-size: 0.8rem;
+            font-weight: 700;
+            padding: 5px 12px;
+            border-radius: 999px;
+        }
+        .gesamt-ok { background: #DFF2E3; color: #1B5E36; }
+        .gesamt-bald { background: #FFF1D6; color: #5C3800; }
+        .gesamt-abgelaufen { background: #FBE3E1; color: #7A1A13; }
+        .gesamt-unvollstaendig { background: #E4E8E5; color: #4A514D; }
+
+        .impf-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+        }
+        .impf { border-radius: 12px; padding: 10px 12px; background: #F3F7F2; }
+        .impf dt { font-size: 0.75rem; color: #55625A; }
+        .impf dd { font-weight: 600; color: #1B5E36; }
+        .impf-bald { background: #FFF1D6; }
+        .impf-bald dt, .impf-bald dd { color: #5C3800; }
+        .impf-bald dd, .impf-abgelaufen dd { font-weight: 700; }
+        .impf-abgelaufen { background: #FBE3E1; }
+        .impf-abgelaufen dt, .impf-abgelaufen dd { color: #7A1A13; }
+        .impf-keine-angabe { background: #EEF1EE; }
+        .impf-keine-angabe dd { color: #55625A; font-weight: 500; }
+
+        .haft-zeile {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-height: 48px;
+            padding: 10px 14px;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 600;
+            background: #DFF2E3;
+            color: #1B5E36;
+        }
+        .haft-zeile span:last-child { margin-left: auto; font-weight: 500; font-size: 0.85rem; text-decoration: underline; }
+        .haft-bald { background: #FFF1D6; color: #5C3800; }
+        .haft-abgelaufen, .haft-keine-angabe { background: #FBE3E1; color: #7A1A13; }
+        .haft-ohne-nachweis { background: #FFF1D6; color: #5C3800; }
+        .hund-fuss {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+            font-size: 0.875rem;
+            color: #55625A;
+        }
+        .hund-fuss form { display: inline; }
+        .kein-hund {
+            background: #FFFFFF;
+            border: 1px dashed #C9D6CC;
+            border-radius: 20px;
+            padding: 22px;
+            color: #55625A;
+        }
+
+        .pausiert {
+            background: #FFFFFF;
+            border-radius: 16px;
+            padding: 16px 20px;
+            margin-bottom: 24px;
+        }
+        .pausiert summary { cursor: pointer; font-weight: 600; min-height: 28px; }
+        .pausiert ul { list-style: none; margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+        .pausiert li { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+        @media (max-width: 800px) {
+            .kennzahlen { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            header h1 { font-size: 1.9rem; }
+        }
+
         .link-button {
             background: none;
             border: none;
-            color: #667eea;
+            color: #173B2C;
             cursor: pointer;
             font-size: 0.85rem;
             text-decoration: underline;
@@ -437,7 +689,11 @@
 <body>
     <header>
         <div class="container">
-            <h1>🐕 Hundemanager</h1>
+            <div class="kopf-zeile">
+                <h1><a href="{{ url_for('index') }}">Hundemanager</a></h1>
+                {% block kopf_aktionen %}{% endblock %}
+            </div>
+            {% block kopf_inhalt %}{% endblock %}
         </div>
     </header>
 

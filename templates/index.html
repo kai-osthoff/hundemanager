@@ -1,122 +1,133 @@
-<!-- templates/index.html -->
+<!-- templates/index.html - Übersicht im Design "Hundeplatz" (5.1.2) -->
 {% extends "base.html" %}
 
+{% block kopf_aktionen %}
+<div style="display: flex; gap: 10px; flex-wrap: wrap;">
+    <a href="{{ url_for('person_neu') }}" class="btn-rund btn-hell">+ Neue Person</a>
+    <a href="{{ url_for('export_excel') }}" class="btn-rund btn-umriss">Excel-Export</a>
+</div>
+{% endblock %}
+
+{% block kopf_inhalt %}
+<ul class="kennzahlen" aria-label="Kennzahlen">
+    <li class="kennzahl"><strong>{{ kennzahlen.hunde }}</strong>aktive {{ 'Hund' if kennzahlen.hunde == 1 else 'Hunde' }}</li>
+    <li class="kennzahl {{ 'kennzahl-warn' if kennzahlen.bald }}"><strong>{{ kennzahlen.bald }}</strong>{{ 'Impfung läuft' if kennzahlen.bald == 1 else 'Impfungen laufen' }} in &lt; 1 Monat ab</li>
+    <li class="kennzahl {{ 'kennzahl-alarm' if kennzahlen.abgelaufen }}"><strong>{{ kennzahlen.abgelaufen }}</strong>{{ 'Impfung' if kennzahlen.abgelaufen == 1 else 'Impfungen' }} abgelaufen</li>
+    <li class="kennzahl {{ 'kennzahl-warn' if kennzahlen.ohne_haftpflicht }}"><strong>{{ kennzahlen.ohne_haftpflicht }}</strong>ohne gültigen Haftpflicht-Nachweis</li>
+</ul>
+{% endblock %}
+
 {% block content %}
-<div class="actions">
-    <a href="{{ url_for('person_neu') }}" class="btn btn-primary">+ Neue Person</a>
-    <a href="{{ url_for('export_excel') }}" class="btn btn-success">📥 Excel-Export</a>
-	<a href="/?all=1" class="btn btn-secondary">Alle anzeigen</a>
-	<a href="/" class="btn btn-secondary">Nur aktive</a>
-
+<div class="leiste">
+    <h2>{{ {'aktiv': 'Alle aktiven Hunde', 'handlungsbedarf': 'Handlungsbedarf', 'alle': 'Alle Hunde'}[ansicht] }}</h2>
+    <nav class="filter" aria-label="Filter">
+        <a href="{{ url_for('index') }}" {% if ansicht == 'aktiv' %}aria-current="page"{% endif %}>Aktiv</a>
+        <a href="{{ url_for('index', ansicht='handlungsbedarf') }}" {% if ansicht == 'handlungsbedarf' %}aria-current="page"{% endif %}>Handlungsbedarf ({{ kennzahlen.handlungsbedarf }})</a>
+        <a href="{{ url_for('index', ansicht='alle') }}" {% if ansicht == 'alle' %}aria-current="page"{% endif %}>Alle</a>
+    </nav>
 </div>
 
-<div class="legende">
-    <div class="legende-item">
-        <div class="legende-farbe legende-gruen"></div>
-        <span>Gültig</span>
+{% for gruppe in gruppen %}
+{% set person = gruppe.person %}
+<section class="halter" aria-label="{{ person.vollstaendiger_name }}">
+    <div class="halter-kopf">
+        <div class="halter-info">
+            <h3>{{ person.nachname }}, {{ person.vorname }}</h3>
+            {% if not person.aktiv %}<span class="etikett etikett-grau">Pausiert</span>{% endif %}
+            {% if person.fotofreigabe %}<span class="etikett">Fotofreigabe</span>{% endif %}
+        </div>
+        <div class="halter-aktionen">
+            <a href="{{ url_for('hund_neu', person_id=person.id) }}" class="knopf">+ Hund</a>
+            <a href="{{ url_for('person_bearbeiten', person_id=person.id) }}" class="knopf">Bearbeiten</a>
+            <form action="{{ url_for('person_toggle_aktiv', person_id=person.id) }}" method="POST">
+                <button type="submit" class="knopf" title="{{ 'Ausblenden, bleibt unter „Pausiert“ erhalten' if person.aktiv else 'Wieder in der Übersicht anzeigen' }}">{{ 'Pausieren' if person.aktiv else 'Wieder aktivieren' }}</button>
+            </form>
+            <form action="{{ url_for('person_loeschen', person_id=person.id) }}" method="POST" onsubmit="return confirm('{{ person.vollstaendiger_name }} und alle Hunde wirklich löschen?\n\nTipp: „Pausieren“ blendet nur aus.');">
+                <button type="submit" class="knopf knopf-gefahr">Löschen</button>
+            </form>
+        </div>
     </div>
-    <div class="legende-item">
-        <div class="legende-farbe legende-orange"></div>
-        <span>Läuft bald ab (&lt; 1 Monat)</span>
-    </div>
-    <div class="legende-item">
-        <div class="legende-farbe legende-rot"></div>
-        <span>Abgelaufen</span>
-    </div>
-</div>
 
-{% if personen %}
-<div class="table-container">
-    <table>
-        <thead>
-            <tr>
-                <th>Besitzer</th>
-                <th>Hundename</th>
-                <th>Geburtstag</th>
-                <th>SHP/DAP/DHP</th>
-                <th>L</th>
-                <th>BbPi</th>
-                <th>T</th>
-                <th>Haftpflicht</th>
-                <th>Bemerkung</th>
-                <th>Aktionen</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for person in personen %}
-                <tr class="person-header {% if not person.aktiv %}inactive{% endif %}">
-                    <td colspan="9">
-                        <strong>{{ person.nachname }}, {{ person.vorname }}</strong>
-                    </td>
-                    <td>
-                        <div class="person-actions">
-                            <a href="{{ url_for('person_bearbeiten', person_id=person.id) }}" class="btn btn-secondary btn-sm">✏️</a>
-                            <a href="{{ url_for('hund_neu', person_id=person.id) }}" class="btn btn-primary btn-sm">+ Hund</a>
-                            <form action="{{ url_for('person_loeschen', person_id=person.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('Person und alle Hunde wirklich löschen?');">
-                                <button type="submit" class="btn btn-danger btn-sm">🗑️</button>
-                            </form>
-							
-							<form action="{{ url_for('person_toggle_aktiv', person_id=person.id) }}" method="POST" style="display:inline;">
-								{% if person.aktiv %}
-									<button type="submit" class="btn btn-warning btn-sm">⏸️</button>
-								{% else %}
-									<button type="submit" class="btn btn-success btn-sm">▶️</button>
-								{% endif %}
-							</form>
+    {% if gruppe.hunde %}
+    <div class="hunde-grid">
+        {% for h in gruppe.hunde %}
+        {% set hund = h.hund %}
+        <article class="hund-karte status-{{ h.gesamt }} {{ 'ist-pausiert' if not person.aktiv }}" aria-label="{{ hund.name }}">
+            <div class="hund-kopf">
+                <div class="avatar" aria-hidden="true">{{ hund.name[:1]|upper }}</div>
+                <div class="hund-name">
+                    <h4>{{ hund.name }}</h4>
+                    <div>{% if hund.geburtstag %}geb. {{ hund.geburtstag|format_datum }}{% else %}Geburtstag unbekannt{% endif %}</div>
+                </div>
+                <span class="gesamt gesamt-{{ h.gesamt }}">{{ h.gesamt_text }}</span>
+            </div>
 
-                        </div>
-                    </td>
-                </tr>
-                {% if person.hunde %}
-                    {% for hund in person.hunde %}
-                    <tr class="{% if not person.aktiv %}inactive{% endif %}">
-                        <td></td>
-                        <td><strong>{{ hund.name }}</strong></td>
-                        <td>{{ hund.geburtstag|format_datum }}</td>
-                        <td><span class="status-cell status-{{ get_status(hund.gueltig_shp_dap_dhp) }}">{{ hund.gueltig_shp_dap_dhp|format_datum }}</span></td>
-                        <td><span class="status-cell status-{{ get_status(hund.gueltig_l) }}">{{ hund.gueltig_l|format_datum }}</span></td>
-                        <td><span class="status-cell status-{{ get_status(hund.gueltig_bbpi) }}">{{ hund.gueltig_bbpi|format_datum }}</span></td>
-                        <td><span class="status-cell status-{{ get_status(hund.gueltig_t) }}">{{ hund.gueltig_t|format_datum }}</span></td>
-                        <td>
-                            {% set nachweis = hund.aktueller_nachweis %}
-                            <a href="{{ url_for('haftpflicht', hund_id=hund.id) }}" style="text-decoration: none;"
-                               title="Haftpflicht-Nachweise ansehen / hochladen">
-                            {% if nachweis %}
-                                <span class="status-cell status-{{ get_status(nachweis.gueltig_bis) }}">📄 {{ nachweis.gueltig_bis|format_datum }}</span>
-                            {% elif hund.haftpflicht_gueltig %}
-                                <span class="badge badge-success">Ja</span> <small style="color: #856404;">ohne Nachweis</small>
-                            {% else %}
-                                <span class="badge badge-danger">Nein</span>
-                            {% endif %}
-                            </a>
-                        </td>
-                        <td class="bemerkung-cell" title="{{ hund.bemerkung or '' }}">{{ hund.bemerkung or '-' }}</td>
-                        <td>
-                            <div class="person-actions">
-                                <a href="{{ url_for('hund_bearbeiten', hund_id=hund.id) }}" class="btn btn-secondary btn-sm">✏️</a>
-                                <form action="{{ url_for('hund_loeschen', hund_id=hund.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('Hund wirklich löschen?');">
-                                    <button type="submit" class="btn btn-danger btn-sm">🗑️</button>
-                                </form>
-                            </div>
-                        </td>
-                    </tr>
-                    {% endfor %}
+            <dl class="impf-grid">
+                {% for i in h.impfungen %}
+                <div class="impf impf-{{ i.status }}">
+                    <dt>{{ i.name }}{% if i.hinweis %} · {{ i.hinweis }}{% endif %}</dt>
+                    <dd>{{ i.datum|format_datum if i.datum else 'nicht eingetragen' }}</dd>
+                </div>
+                {% endfor %}
+            </dl>
+
+            <a href="{{ url_for('haftpflicht', hund_id=hund.id) }}" class="haft-zeile haft-{{ h.haftpflicht }}">
+                {% if h.nachweis %}
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 14l2 2 3-4"/></svg>
+                    <span>Haftpflicht bis {{ h.nachweis.gueltig_bis|format_datum }}{% if h.haftpflicht == 'abgelaufen' %} – abgelaufen{% endif %}</span>
+                    <span>{{ 'Neuen Nachweis hochladen' if h.haftpflicht == 'abgelaufen' else 'Nachweis ansehen' }}</span>
                 {% else %}
-                    <tr class="{% if not person.aktiv %}inactive{% endif %}">
-                        <td></td>
-                        <td colspan="9" style="color: #6c757d; font-style: italic;">Noch keine Hunde angelegt</td>
-                    </tr>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg>
+                    <span>{{ 'Haftpflicht: Nachweis fehlt' if h.haftpflicht == 'ohne-nachweis' else 'Keine Haftpflicht hinterlegt' }}</span>
+                    <span>Hochladen</span>
                 {% endif %}
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-{% else %}
-<div class="table-container">
-    <div class="empty-state">
-        <h3>Noch keine Einträge vorhanden</h3>
-        <p>Legen Sie eine neue Person an, um zu beginnen.</p>
+            </a>
+
+            <div class="hund-fuss">
+                <span>{{ hund.bemerkung or '' }}</span>
+                <span style="display: flex; gap: 6px;">
+                    <a href="{{ url_for('hund_bearbeiten', hund_id=hund.id) }}" class="knopf">Bearbeiten</a>
+                    <form action="{{ url_for('hund_loeschen', hund_id=hund.id) }}" method="POST" onsubmit="return confirm('{{ hund.name }} wirklich löschen?');">
+                        <button type="submit" class="knopf knopf-gefahr" aria-label="{{ hund.name }} löschen">Löschen</button>
+                    </form>
+                </span>
+            </div>
+        </article>
+        {% endfor %}
     </div>
+    {% else %}
+    <div class="kein-hund">Noch kein Hund angelegt. <a href="{{ url_for('hund_neu', person_id=person.id) }}">Hund hinzufügen</a></div>
+    {% endif %}
+</section>
+{% else %}
+<div class="kein-hund" style="text-align: center; padding: 48px 20px;">
+    {% if not gibt_personen %}
+        <h3 style="margin-bottom: 8px;">Noch keine Einträge</h3>
+        <p>Mit „+ Neue Person“ oben legst du den ersten Halter an.</p>
+    {% elif ansicht == 'handlungsbedarf' %}
+        <h3 style="margin-bottom: 8px;">Alles in Ordnung</h3>
+        <p>Bei keinem aktiven Hund ist gerade etwas zu tun.</p>
+    {% else %}
+        <h3 style="margin-bottom: 8px;">Gerade ist niemand aktiv</h3>
+        <p>Alle {{ anzahl_pausiert }} Halter sind pausiert. <a href="{{ url_for('index', ansicht='alle') }}">Alle anzeigen</a></p>
+    {% endif %}
 </div>
+{% endfor %}
+
+{% if pausierte %}
+<details class="pausiert">
+    <summary>Pausiert ({{ pausierte|length }})</summary>
+    <ul>
+        {% for person in pausierte %}
+        <li>
+            <span><strong>{{ person.nachname }}, {{ person.vorname }}</strong>
+                {% if person.hunde %} – {{ person.hunde|map(attribute='name')|join(', ') }}{% endif %}</span>
+            <form action="{{ url_for('person_toggle_aktiv', person_id=person.id) }}" method="POST">
+                <button type="submit" class="knopf">Wieder aktivieren</button>
+            </form>
+        </li>
+        {% endfor %}
+    </ul>
+</details>
 {% endif %}
 {% endblock %}
