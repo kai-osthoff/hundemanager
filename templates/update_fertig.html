@@ -1,37 +1,84 @@
 <!-- templates/update_fertig.html -->
-{% extends "base.html" %}
+<!--
+    Bewusst eigenständig (kein "extends base.html"):
+    Diese Seite rendert noch der ALTE Prozess, nachdem die neuen Dateien schon
+    auf der Platte liegen. Sie darf daher nur Routen und Variablen nutzen, die
+    es seit v5.1.0 gibt: url_for('index'), url_for('api_version'), meldung, alte_version.
+-->
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hundemanager – Update</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f7fa;
+            color: #333;
+        }
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        .box {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            padding: 30px;
+            max-width: 600px;
+            margin: 30px auto;
+            text-align: center;
+        }
+        .btn {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 10px 20px;
+            border-radius: 6px;
+            background-color: #6c757d;
+            color: white;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <header><h1>🐕 Hundemanager</h1></header>
+    <div class="box">
+        <h2>✅ {{ meldung }}</h2>
+        <p id="status" style="color: #6c757d;">Der Hundemanager startet neu … bitte einen Moment warten.</p>
+        <a href="{{ url_for('index') }}" class="btn">Zur Übersicht</a>
+    </div>
 
-{% block content %}
-<div class="form-container" style="text-align: center;">
-    <h2>✅ {{ meldung }}</h2>
-    <p id="status" style="margin-top: 15px; color: #6c757d;">Der Hundemanager startet neu … bitte einen Moment warten.</p>
-    <p style="margin-top: 25px;"><a href="{{ url_for('index') }}" class="btn btn-secondary">Zur Übersicht</a></p>
-</div>
+    <script>
+        // Warten, bis der Neustart passiert ist, dann zur Übersicht wechseln
+        const alteVersion = {{ alte_version|tojson }};
+        const start = Date.now();
+        let warWeg = false;  // Server war zwischendurch weg = Neustart ist passiert
 
-<script>
-    // Warten, bis die neue Version läuft, dann zur Übersicht wechseln
-    const alteVersion = {{ alte_version|tojson }};
-    const start = Date.now();
-
-    async function pruefen() {
-        try {
-            const antwort = await fetch('{{ url_for("api_version") }}', {cache: 'no-store'});
-            const daten = await antwort.json();
-            if (daten.version !== alteVersion) {
-                window.location.href = '{{ url_for("index") }}';
+        async function pruefen() {
+            try {
+                const antwort = await fetch('{{ url_for("api_version") }}', {cache: 'no-store'});
+                const daten = await antwort.json();
+                // Neue Version läuft - oder nach dem Neustart wieder die alte (Update wurde zurückgenommen)
+                if (daten.version !== alteVersion || warWeg) {
+                    window.location.href = '{{ url_for("index") }}';
+                    return;
+                }
+            } catch (e) {
+                warWeg = true;  // Server startet gerade neu - weiter warten
+            }
+            if (Date.now() - start > 120000) {
+                document.getElementById('status').textContent =
+                    'Der Neustart dauert ungewöhnlich lange. Bitte das schwarze Fenster schließen und START.bat neu öffnen.';
                 return;
             }
-        } catch (e) {
-            // Server startet gerade neu - einfach weiter warten
+            setTimeout(pruefen, 1000);
         }
-        if (Date.now() - start > 60000) {
-            document.getElementById('status').textContent =
-                'Der Neustart dauert ungewöhnlich lange. Bitte das schwarze Fenster schließen und START.bat neu öffnen.';
-            return;
-        }
-        setTimeout(pruefen, 1000);
-    }
 
-    setTimeout(pruefen, 2000);
-</script>
-{% endblock %}
+        setTimeout(pruefen, 2000);
+    </script>
+</body>
+</html>

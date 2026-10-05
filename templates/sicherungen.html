@@ -1,0 +1,72 @@
+<!-- templates/sicherungen.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="actions">
+    <a href="{{ url_for('index') }}" class="btn btn-secondary">← Zur Übersicht</a>
+    <form action="{{ url_for('sicherung_jetzt') }}" method="POST">
+        <button type="submit" class="btn btn-primary">Jetzt sichern</button>
+    </form>
+</div>
+
+<div class="legende" style="display: block;">
+    <p>Der Hundemanager sichert automatisch <strong>einmal täglich</strong> und <strong>vor jedem Update</strong>.
+       Jede Sicherung wird nach dem Erstellen geprüft.</p>
+    <p style="margin-top: 8px; font-size: 0.9rem; color: #6c757d;">
+        Gespeichert in: <code>{{ backup_dir }}</code><br>
+        Zweite Kopie in: <code>{{ zweiter_ort }}</code>
+    </p>
+</div>
+
+{% if backups %}
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Datum</th>
+                <th>Art</th>
+                <th>Version</th>
+                <th>Personen</th>
+                <th>Hunde</th>
+                <th>Zweite Kopie</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for b in backups %}
+            <tr>
+                <td>{{ b.erstellt[8:10] }}.{{ b.erstellt[5:7] }}.{{ b.erstellt[0:4] }} {{ b.erstellt[11:16] }}</td>
+                <td>{{ b.art_text }}</td>
+                <td>{{ b.version }}</td>
+                <td>{{ b.datensaetze.person if b.datensaetze else '-' }}</td>
+                <td>{{ b.datensaetze.hund if b.datensaetze else '-' }}</td>
+                <td>
+                    {% if b.gespiegelt %}
+                        <span class="badge badge-success">Ja</span>
+                    {% else %}
+                        <span class="badge badge-danger">Nein</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if b.datensaetze %}
+                    <form action="{{ url_for('sicherung_wiederherstellen') }}" method="POST"
+                          onsubmit="return confirm('Daten vom {{ b.erstellt[8:10] }}.{{ b.erstellt[5:7] }}.{{ b.erstellt[0:4] }} {{ b.erstellt[11:16] }} wiederherstellen?\n\nDer aktuelle Stand wird vorher gesichert und kann jederzeit zurückgeholt werden.');">
+                        <input type="hidden" name="name" value="{{ b.name }}">
+                        <button type="submit" class="btn btn-secondary btn-sm">Wiederherstellen</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="table-container">
+    <div class="empty-state">
+        <h3>Noch keine Sicherungen</h3>
+        <p>Mit „Jetzt sichern“ legst du die erste an.</p>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

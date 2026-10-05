@@ -4,20 +4,25 @@ from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
 import io
+import json
 import os
 import secrets
 import subprocess
 import sys
 import threading
 import time
+import traceback
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from sqlalchemy import func, inspect, text #NEU
+import backup
 import updater
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = secrets.token_hex(32)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///hundemanager.db'
+# Fester Pfad, damit App und Sicherung garantiert dieselbe Datei meinen
+os.makedirs(backup.INSTANCE_DIR, exist_ok=True)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + backup.DB_PFAD
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
@@ -364,9 +369,22 @@ def impfstatus_farbe(hund):
 
 # --- Updates ---
 
-NEUSTART_CODE = 3  # start.py startet die App bei diesem Exit-Code neu
+NEUSTART_CODE = 3        # start.py startet die App bei diesem Exit-Code neu
+SELBSTTEST_FEHLER = 4    # start.py nimmt das Update dann zurück
 # Beim Start festhalten - nach einem Update steht in VERSION schon die neue Nummer
 LAUFENDE_VERSION = updater.aktuelle_version()
+# Ab Protokoll 2 sichert start.py Updates ab (Rücknahme bei Fehlstart)
+LAUNCHER_PROTOKOLL = int(os.environ.get('HUNDEMANAGER_LAUNCHER') or 0)
+
+_hinweise = {'backup_fehler': None}
+
+
+def lies_update_fehlgeschlagen():
+    try:
+        with open(backup.UPDATE_FEHLGESCHLAGEN, encoding='utf-8') as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
 
 
 @app.context_processor
@@ -374,6 +392,10 @@ def update_kontext():
     return {
         'app_version': LAUFENDE_VERSION,
         'update_info': updater.update_status(),
+        'update_fehlgeschlagen': lies_update_fehlgeschlagen(),
+        'backup_fehler': _hinweise['backup_fehler'],
+        # Alter Starter (v5.1.0) läuft noch - erst nach Neustart über START.bat ist die Absicherung aktiv
+        'starter_veraltet': LAUNCHER_PROTOKOLL == 1,
     }
 
 
@@ -391,14 +413,23 @@ def update_pruefen():
 
 @app.route('/update/installieren', methods=['POST'])
 def update_installieren():
-    erfolg, meldung = updater.installiere_update(db.engine.url.database)
+    # Vorher laden: nach dem Update liegen auf der Platte schon die neuen Templates,
+    # dieser Prozess kennt aber nur die alten Routen
+    fertig_seite = app.jinja_env.get_template('update_fertig.html')
+    erfolg, meldung = updater.installiere_update()
     if not erfolg:
         flash(meldung, 'error')
         return redirect(url_for('index'))
 
     threading.Thread(target=neustart, daemon=True).start()
-    return render_template('update_fertig.html', meldung=meldung,
-                           alte_version=LAUFENDE_VERSION)
+    return fertig_seite.render(meldung=meldung, alte_version=LAUFENDE_VERSION, url_for=url_for)
+
+
+@app.route('/update/hinweis-schliessen', methods=['POST'])
+def update_hinweis_schliessen():
+    if os.path.exists(backup.UPDATE_FEHLGESCHLAGEN):
+        os.remove(backup.UPDATE_FEHLGESCHLAGEN)
+    return redirect(url_for('index'))
 
 
 @app.route('/api/version')
@@ -408,12 +439,59 @@ def api_version():
 
 def neustart():
     time.sleep(1.5)  # Antwortseite erst noch ausliefern
-    if os.environ.get('HUNDEMANAGER_LAUNCHER'):
+    if LAUNCHER_PROTOKOLL:
         os._exit(NEUSTART_CODE)  # start.py startet neu
     # Ohne start.py gestartet (z.B. "python app.py"): selbst neu starten
     env = dict(os.environ, HUNDEMANAGER_WARTEN='2')
     subprocess.Popen([sys.executable] + sys.argv, env=env)
     os._exit(0)
+
+
+# --- Sicherungen ---
+
+def taeglich_sichern():
+    """Einmal pro Tag eine Sicherung - schützt auch vor versehentlichem Löschen."""
+    try:
+        if backup.taegliches_backup_faellig():
+            _, spiegel_fehler = backup.erstelle_backup('taeglich', LAUFENDE_VERSION)
+            _hinweise['backup_fehler'] = spiegel_fehler
+    except backup.BackupFehler as e:
+        _hinweise['backup_fehler'] = f'Tägliche Sicherung fehlgeschlagen: {e}'
+        print(_hinweise['backup_fehler'])
+
+
+@app.route('/sicherungen')
+def sicherungen():
+    return render_template('sicherungen.html', backups=backup.liste_backups(),
+                           backup_dir=backup.BACKUP_DIR, zweiter_ort=backup.zweiter_ort())
+
+
+@app.route('/sicherungen/jetzt', methods=['POST'])
+def sicherung_jetzt():
+    try:
+        _, spiegel_fehler = backup.erstelle_backup('manuell', LAUFENDE_VERSION)
+        flash('Sicherung erstellt und geprüft.', 'success')
+        if spiegel_fehler:
+            flash(spiegel_fehler, 'error')
+    except backup.BackupFehler as e:
+        flash(f'Sicherung fehlgeschlagen: {e}', 'error')
+    return redirect(url_for('sicherungen'))
+
+
+@app.route('/sicherungen/wiederherstellen', methods=['POST'])
+def sicherung_wiederherstellen():
+    try:
+        ordner = backup.finde_backup(request.form.get('name', ''))
+        # Keine offenen Verbindungen der App, während die Datenbank zurückgespielt wird
+        db.session.remove()
+        db.engine.dispose()
+        manifest = backup.datenbank_wiederherstellen(ordner, LAUFENDE_VERSION)
+        migriere_datenbank()  # ältere Sicherung? Fehlende Spalten ergänzen
+        flash(f'Daten vom {manifest["erstellt"][:16].replace("T", " ")} wiederhergestellt. '
+              f'Der vorherige Stand wurde vorher gesichert.', 'success')
+    except backup.BackupFehler as e:
+        flash(f'Wiederherstellung nicht möglich: {e} Die Daten wurden nicht verändert.', 'error')
+    return redirect(url_for('sicherungen'))
 
 
 # --- Datenbank-Migration ---
@@ -436,7 +514,6 @@ def migriere_datenbank():
     Ohne diese Migration würde eine ältere Datenbank (z.B. aus v3/v4) nach
     einem Update mit "no such column" abstürzen.
     """
-    db_pfad = db.engine.url.database
     inspektor = inspect(db.engine)
     vorhandene_tabellen = set(inspektor.get_table_names())
     gesichert = False
@@ -449,7 +526,8 @@ def migriere_datenbank():
             if spalte.name in vorhanden:
                 continue
             if not gesichert:
-                updater.sichere_datenbank(db_pfad, 'vor-migration')
+                # Ohne geprüfte Sicherung keine Änderung an der Datenbank
+                backup.erstelle_backup('vor-migration', LAUFENDE_VERSION, mit_code=False)
                 gesichert = True
             sql = f'ALTER TABLE {tabelle.name} ADD COLUMN {spalte.name} {spalte.type.compile(db.engine.dialect)}'
             standard = _sql_standardwert(spalte)
@@ -462,12 +540,43 @@ def migriere_datenbank():
     db.create_all()
 
 
-if __name__ == '__main__':
-    time.sleep(float(os.environ.get('HUNDEMANAGER_WARTEN', 0)))
-    with app.app_context():
-        migriere_datenbank()
-    updater.starte_hintergrund_pruefung()
+def selbsttest():
+    """Lädt die wichtigsten Seiten einmal intern - fällt etwas um, gilt das Update als fehlgeschlagen."""
+    with app.test_client() as client:
+        for pfad in ('/', '/?all=1', '/sicherungen', '/export/excel'):
+            antwort = client.get(pfad)
+            if antwort.status_code != 200:
+                raise RuntimeError(f'Selbsttest: {pfad} liefert {antwort.status_code}')
+
+
+def starten():
+    nach_update = backup.lies_update_marker() is not None
+    try:
+        with app.app_context():
+            migriere_datenbank()
+            selbsttest()
+    except Exception:
+        traceback.print_exc()
+        if not nach_update:
+            raise
+        if LAUNCHER_PROTOKOLL >= 2:
+            sys.exit(SELBSTTEST_FEHLER)  # start.py nimmt das Update zurück
+        # Alter Starter: selbst zurücknehmen und neu starten lassen
+        backup.update_zuruecknehmen('Die neue Version hat den Selbsttest nicht bestanden.')
+        neustart()
+
+    if nach_update:
+        backup.entferne_update_marker()
+        print(f'Update auf {LAUFENDE_VERSION} bestätigt.')
+
+    taeglich_sichern()
+    updater.starte_hintergrund_pruefung(taeglich_sichern)
     port = int(os.environ.get('HUNDEMANAGER_PORT', 5000))
     print(f'Hundemanager {LAUFENDE_VERSION} läuft auf http://127.0.0.1:{port}')
     # Nur auf diesem PC erreichbar, ohne Debugger
     app.run(host='127.0.0.1', port=port)
+
+
+if __name__ == '__main__':
+    time.sleep(float(os.environ.get('HUNDEMANAGER_WARTEN', 0)))
+    starten()

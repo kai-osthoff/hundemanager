@@ -391,6 +391,29 @@
             margin-top: 6px;
         }
 
+        .hinweis-banner {
+            padding: 16px 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .hinweis-fehler {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        
+        .hinweis-info {
+            background: #fff3cd;
+            border: 1px solid #ffeeba;
+            color: #856404;
+        }
+        
         footer {
             display: flex;
             justify-content: center;
@@ -419,6 +442,33 @@
     </header>
 
     <div class="container">
+        {% if update_fehlgeschlagen %}
+            <div class="hinweis-banner hinweis-fehler">
+                <div>
+                    <strong>Das Update auf Version {{ update_fehlgeschlagen.version }} hat nicht geklappt.</strong><br>
+                    Version {{ update_fehlgeschlagen.zurueck_auf }} und deine Daten wurden automatisch wiederhergestellt.
+                    Es ist nichts verloren gegangen. Bitte gib Kai Bescheid.
+                </div>
+                <form action="{{ url_for('update_hinweis_schliessen') }}" method="POST">
+                    <button type="submit" class="btn btn-secondary btn-sm">OK</button>
+                </form>
+            </div>
+        {% endif %}
+        
+        {% if backup_fehler %}
+            <div class="hinweis-banner hinweis-fehler">
+                <div><strong>Achtung Sicherung:</strong> {{ backup_fehler }}</div>
+                <a href="{{ url_for('sicherungen') }}" class="btn btn-secondary btn-sm">Zu den Sicherungen</a>
+            </div>
+        {% endif %}
+        
+        {% if starter_veraltet %}
+            <div class="hinweis-banner hinweis-info">
+                <div>Bitte den Hundemanager einmal schließen (schwarzes Fenster) und über <strong>START.bat</strong>
+                neu öffnen. Erst dann ist der verbesserte Update-Schutz aktiv.</div>
+            </div>
+        {% endif %}
+        
         {% if update_info.verfuegbar %}
             <div class="update-banner">
                 <div>
@@ -453,6 +503,7 @@
 
     <footer>
         <span>Version {{ app_version }}</span>
+        <a href="{{ url_for('sicherungen') }}" class="link-button">Sicherungen</a>
         <form action="{{ url_for('update_pruefen') }}" method="POST">
             <button type="submit" class="link-button">Nach Updates suchen</button>
         </form>

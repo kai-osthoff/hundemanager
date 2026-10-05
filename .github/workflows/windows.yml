@@ -1,0 +1,37 @@
+# Windows-Test - der Hundemanager muss IMMER auf Windows 11 funktionieren.
+# release.sh veröffentlicht nur, wenn dieser Test für den Commit grün ist.
+name: Windows
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # Welche Version Saskia hat, ist offen - alle aktuellen abdecken
+        python: ['3.11', '3.12', '3.13', '3.14']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Tags werden für den Test "Update von v5.1.0" gebraucht
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Pakete installieren (wie start.py bei Saskia)
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+
+      - name: START.bat hat Windows-Zeilenenden
+        shell: python
+        run: |
+          daten = open('START.bat', 'rb').read()
+          assert b'\r\n' in daten and b'\n' not in daten.replace(b'\r\n', b''), 'START.bat braucht CRLF'
+
+      - name: Tests
+        run: python -m unittest discover -s tests -v

@@ -66,7 +66,14 @@ Die Sicherung auf dem Desktop würde ich ein paar Wochen aufheben.
 Gibt es eine neue Version, erscheint oben im Hundemanager ein **blauer Hinweis**.
 Unter „Was ist neu?“ steht, was sich geändert hat. Ein Klick auf **„Jetzt aktualisieren“**, kurz warten, fertig.
 
-Vor jedem Update sichert der Hundemanager automatisch deine Daten im Ordner `instance\backup`.
+Vor jedem Update sichert der Hundemanager automatisch deine Daten und das Programm und prüft
+die Sicherung. Klappt etwas nicht, stellt er den vorherigen Stand selbst wieder her.
+
+## Sicherungen
+
+Der Hundemanager sichert **einmal täglich** und **vor jedem Update**, im Programmordner und
+zusätzlich in **Dokumente\Hundemanager-Backups**. Unten auf der Seite unter **„Sicherungen“**
+kannst du selbst sichern oder einen älteren Stand zurückholen.
 
 ## Wenn etwas nicht klappt
 
