@@ -483,7 +483,10 @@ class UpdateTests(unittest.TestCase):
         self.release(release_zip(self.NEU))
         self.starten()
 
-        self.assertIn('Neue Version 9.9.9', self.seite())
+        kopf = self.seite()
+        self.assertIn('Neue Version 9.9.9 installieren', kopf)
+        self.assertIn('Testrelease', kopf)
+        self.assertNotIn('Updates suchen', kopf)
         self.assertIn('wurde installiert', self.update_klicken())
         self.assertEqual(self.warte_auf_neustart(), self.NEU)
 
@@ -499,6 +502,18 @@ class UpdateTests(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(self.app_dir, 'instance', 'update_laeuft.json')))
         self.assertEqual(lies_bytes(os.path.join(self.app_dir, 'START.bat')), self.start_bat_vorher)
         self.assertNotIn('hat nicht geklappt', self.seite())
+
+    def test_ohne_neue_version_steht_oben_updates_suchen(self):
+        self.github = GitHubNachbau(self.ALT, release_zip(self.ALT))
+        self.starten()
+
+        for pfad in ('/', '/nachweise', '/sicherungen'):
+            seite = self.seite(pfad)
+            self.assertIn('Updates suchen', seite)
+            self.assertNotIn('installieren</button>', seite)
+        anfrage = urllib.request.Request(self.url('/update/pruefen'), data=b'', method='POST')
+        with self.browser.open(anfrage, timeout=30) as a:
+            self.assertIn('auf dem neuesten Stand', a.read().decode('utf-8'))
 
     def test_kaputtes_programm_wird_zurueckgenommen(self):
         db_anlegen(self.db)

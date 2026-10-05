@@ -393,30 +393,46 @@
             background-color: #e0a800;
         }
 
-        /* Update-Hinweis */
-        .update-banner {
+        /* Update rechts oben im Kopf */
+        .kopf-rechts {
             display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 20px;
+            align-items: flex-start;
+            gap: 10px;
             flex-wrap: wrap;
-            padding: 16px 20px;
-            margin-bottom: 20px;
-            background: #E1EBE3;
-            border: 1px solid #173B2C;
-            border-radius: 8px;
+            margin-left: auto;
         }
 
-        .update-banner details {
+        .update-kopf {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 4px;
+        }
+
+        .update-kopf details {
+            font-size: 0.85rem;
+        }
+
+        .update-kopf summary {
+            cursor: pointer;
+            color: #C6F06A;
+        }
+
+        .update-kopf pre {
+            position: absolute;
+            right: 0;
+            top: 100%;
+            z-index: 10;
+            width: min(420px, 90vw);
             margin-top: 6px;
-            font-size: 0.9rem;
-            color: #495057;
-        }
-
-        .update-banner pre {
+            padding: 14px 16px;
             white-space: pre-wrap;
             font-family: inherit;
-            margin-top: 6px;
+            color: #15201A;
+            background: #FFFFFF;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
         }
 
         .hinweis-banner {
@@ -716,7 +732,27 @@
         <div class="container">
             <div class="kopf-zeile">
                 <h1><a href="{{ url_for('index') }}">Hundemanager</a></h1>
-                {% block kopf_aktionen %}{% endblock %}
+                <div class="kopf-rechts">
+                    {% block kopf_aktionen %}{% endblock %}
+                    {% if update_info.verfuegbar %}
+                        <div class="update-kopf">
+                            <form action="{{ url_for('update_installieren') }}" method="POST"
+                                  onsubmit="this.querySelector('button').disabled = true; this.querySelector('button').textContent = 'Update läuft …';">
+                                <button type="submit" class="btn-rund btn-hell">🎉 Neue Version {{ update_info.version }} installieren</button>
+                            </form>
+                            {% if update_info.notizen %}
+                                <details>
+                                    <summary>Was ist neu?</summary>
+                                    <pre>{{ update_info.notizen }}</pre>
+                                </details>
+                            {% endif %}
+                        </div>
+                    {% else %}
+                        <form action="{{ url_for('update_pruefen') }}" method="POST">
+                            <button type="submit" class="btn-rund btn-umriss">Updates suchen</button>
+                        </form>
+                    {% endif %}
+                </div>
             </div>
             {% block kopf_inhalt %}{% endblock %}
         </div>
@@ -750,25 +786,6 @@
             </div>
         {% endif %}
         
-        {% if update_info.verfuegbar %}
-            <div class="update-banner">
-                <div>
-                    <strong>🎉 Neue Version {{ update_info.version }} verfügbar</strong>
-                    (installiert: {{ app_version }})
-                    {% if update_info.notizen %}
-                        <details>
-                            <summary>Was ist neu?</summary>
-                            <pre>{{ update_info.notizen }}</pre>
-                        </details>
-                    {% endif %}
-                </div>
-                <form action="{{ url_for('update_installieren') }}" method="POST"
-                      onsubmit="this.querySelector('button').disabled = true; this.querySelector('button').textContent = 'Update läuft …';">
-                    <button type="submit" class="btn btn-primary">Jetzt aktualisieren</button>
-                </form>
-            </div>
-        {% endif %}
-
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 <div class="flash-messages">
@@ -786,9 +803,6 @@
         <span>Version {{ app_version }}</span>
         <a href="{{ url_for('nachweise_uebersicht') }}" class="link-button">Nachweise</a>
         <a href="{{ url_for('sicherungen') }}" class="link-button">Sicherungen</a>
-        <form action="{{ url_for('update_pruefen') }}" method="POST">
-            <button type="submit" class="link-button">Nach Updates suchen</button>
-        </form>
     </footer>
 </body>
 </html>
