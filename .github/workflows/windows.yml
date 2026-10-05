@@ -23,6 +23,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: requirements.txt
 
       - name: Pakete installieren (wie start.py bei Saskia)
         run: python -m pip install --disable-pip-version-check -r requirements.txt

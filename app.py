@@ -541,6 +541,10 @@ NEUSTART_CODE = 3        # start.py startet die App bei diesem Exit-Code neu
 SELBSTTEST_FEHLER = 4    # start.py nimmt das Update dann zurück
 # Beim Start festhalten - nach einem Update steht in VERSION schon die neue Nummer
 LAUFENDE_VERSION = updater.aktuelle_version()
+# Eindeutig je Prozess - daran erkennen Browser und Tests einen Neustart. Unter Windows
+# ist der Server beim Neustart nicht erkennbar "weg": Verbindungsversuche warten dort
+# ~2 Sekunden und landen dann nahtlos beim neuen Prozess.
+INSTANZ = f'{os.getpid()}-{secrets.token_hex(4)}'
 # Ab Protokoll 2 sichert start.py Updates ab (Rücknahme bei Fehlstart)
 LAUNCHER_PROTOKOLL = int(os.environ.get('HUNDEMANAGER_LAUNCHER') or 0)
 
@@ -590,7 +594,8 @@ def update_installieren():
         return redirect(url_for('index'))
 
     threading.Thread(target=neustart, daemon=True).start()
-    return fertig_seite.render(meldung=meldung, alte_version=LAUFENDE_VERSION, url_for=url_for)
+    return fertig_seite.render(meldung=meldung, alte_version=LAUFENDE_VERSION, alte_instanz=INSTANZ,
+                               url_for=url_for)
 
 
 @app.route('/update/hinweis-schliessen', methods=['POST'])
@@ -602,7 +607,7 @@ def update_hinweis_schliessen():
 
 @app.route('/api/version')
 def api_version():
-    return jsonify(version=LAUFENDE_VERSION)
+    return jsonify(version=LAUFENDE_VERSION, instanz=INSTANZ)
 
 
 def neustart():

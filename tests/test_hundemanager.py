@@ -397,30 +397,38 @@ class UpdateTests(unittest.TestCase):
     def url(self, pfad):
         return f'http://127.0.0.1:{self.port}{pfad}'
 
-    def version_abfragen(self):
+    def status_abfragen(self):
         with urllib.request.urlopen(self.url('/api/version'), timeout=5) as a:
-            return json.load(a)['version']
+            return json.load(a)
+
+    def version_abfragen(self):
+        return self.status_abfragen()['version']
 
     def warte_auf_version(self, timeout=90):
         ende = time.time() + timeout
         while time.time() < ende:
             try:
-                return self.version_abfragen()
+                status = self.status_abfragen()
+                self.instanz = status.get('instanz')  # v5.1.0 kennt noch keine Kennung
+                return status['version']
             except (urllib.error.URLError, ConnectionError, OSError):
                 time.sleep(0.5)
         self.fail('Hundemanager antwortet nicht')
 
-    def warte_auf_neustart(self, timeout=180):
-        """Wartet, bis der Server weg war und wieder antwortet. Gibt die dann laufende Version zurück."""
+    def warte_auf_neustart(self, timeout=90):
+        """Wartet, bis ein NEUER Prozess antwortet (andere Kennung). Gibt dessen Version zurück.
+
+        Nicht an "Server war kurz weg" festmachen: unter Windows warten Verbindungs-
+        versuche ~2 s und landen nahtlos beim neuen Prozess - der Server ist nie "weg".
+        """
         ende = time.time() + timeout
-        war_weg = False
         while time.time() < ende:
             try:
-                version = self.version_abfragen()
-                if war_weg:
-                    return version
+                status = self.status_abfragen()
+                if status.get('instanz') and status.get('instanz') != self.instanz:
+                    return status['version']
             except (urllib.error.URLError, ConnectionError, OSError):
-                war_weg = True
+                pass
             time.sleep(0.5)
         self.fail('Kein Neustart nach dem Update')
 

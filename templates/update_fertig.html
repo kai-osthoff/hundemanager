@@ -4,6 +4,7 @@
     Diese Seite rendert noch der ALTE Prozess, nachdem die neuen Dateien schon
     auf der Platte liegen. Sie darf daher nur Routen und Variablen nutzen, die
     es seit v5.1.0 gibt: url_for('index'), url_for('api_version'), meldung, alte_version.
+    alte_instanz liefert erst v5.1.1+ - daher mit default(none).
 -->
 <!DOCTYPE html>
 <html lang="de">
@@ -55,6 +56,8 @@
     <script>
         // Warten, bis der Neustart passiert ist, dann zur Übersicht wechseln
         const alteVersion = {{ alte_version|tojson }};
+        // Kennung des Prozesses, der diese Seite ausgeliefert hat (null bei v5.1.0)
+        const alteInstanz = {{ alte_instanz|default(none)|tojson }};
         const start = Date.now();
         let warWeg = false;  // Server war zwischendurch weg = Neustart ist passiert
 
@@ -62,8 +65,10 @@
             try {
                 const antwort = await fetch('{{ url_for("api_version") }}', {cache: 'no-store'});
                 const daten = await antwort.json();
-                // Neue Version läuft - oder nach dem Neustart wieder die alte (Update wurde zurückgenommen)
-                if (daten.version !== alteVersion || warWeg) {
+                // Neuer Prozess läuft: neue Version - oder wieder die alte (Update zurückgenommen).
+                // Unter Windows ist der Server beim Neustart oft nie erkennbar weg, daher die Kennung.
+                const neuerProzess = alteInstanz !== null && daten.instanz && daten.instanz !== alteInstanz;
+                if (daten.version !== alteVersion || neuerProzess || warWeg) {
                     window.location.href = '{{ url_for("index") }}';
                     return;
                 }
