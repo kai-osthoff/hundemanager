@@ -27,8 +27,13 @@ Entwickelt wird auf macOS, aber „läuft auf dem Mac“ heißt **nicht** fertig
   Batch-Dateien zeilenweise). Logik gehört nach `start.py`, nicht in die `.bat`.
 - **Geöffnete Dateien sind unter Windows gesperrt.** Die Datenbank nicht ersetzen
   oder verschieben, solange die App läuft; Updates schreiben über Temp-Datei + `os.replace`.
-- **Python heißt bei Saskia `python`** (python.org-Installer, „Add to PATH“). Kein
-  `python3`, keine Shell-Skripte, keine macOS-/Unix-only-Tools in der App.
+- **Python starten über `py`, nicht `python`:** Unter Windows 11 kann `python` auf den
+  Microsoft-Store-Platzhalter (`WindowsApps\python.exe`) zeigen, wenn der im PATH vor
+  dem echten Python steht – in der VM passiert. `START.bat` nimmt daher `py` (kommt mit
+  python.org) und fällt nur ohne `py` auf `python` zurück. Kein `python3`, keine
+  Shell-Skripte, keine macOS-/Unix-only-Tools in der App.
+- `START.bat` wird bei Updates nie ausgetauscht – Verbesserungen daran erreichen nur
+  neue Installationen. Logik deshalb immer in `start.py`.
 - **Nur Python-Standardbibliothek** für Updater und Starter – bei Saskia ist nichts
   außer `requirements.txt` installiert.
 - Keine Unix-Annahmen: kein `os.fork`, keine Signale außer Strg+C, kein `chmod`,
