@@ -355,6 +355,60 @@
 		.inactive {
 			opacity: 0.5;
 		}
+
+        .btn-warning {
+            background-color: #ffc107;
+            color: #212529;
+        }
+
+        .btn-warning:hover {
+            background-color: #e0a800;
+        }
+
+        /* Update-Hinweis */
+        .update-banner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            flex-wrap: wrap;
+            padding: 16px 20px;
+            margin-bottom: 20px;
+            background: #e8eaff;
+            border: 1px solid #667eea;
+            border-radius: 8px;
+        }
+
+        .update-banner details {
+            margin-top: 6px;
+            font-size: 0.9rem;
+            color: #495057;
+        }
+
+        .update-banner pre {
+            white-space: pre-wrap;
+            font-family: inherit;
+            margin-top: 6px;
+        }
+
+        footer {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 0 30px;
+            font-size: 0.85rem;
+            color: #6c757d;
+        }
+
+        .link-button {
+            background: none;
+            border: none;
+            color: #667eea;
+            cursor: pointer;
+            font-size: 0.85rem;
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
@@ -363,8 +417,27 @@
             <h1>🐕 Hundemanager</h1>
         </div>
     </header>
-    
+
     <div class="container">
+        {% if update_info.verfuegbar %}
+            <div class="update-banner">
+                <div>
+                    <strong>🎉 Neue Version {{ update_info.version }} verfügbar</strong>
+                    (installiert: {{ app_version }})
+                    {% if update_info.notizen %}
+                        <details>
+                            <summary>Was ist neu?</summary>
+                            <pre>{{ update_info.notizen }}</pre>
+                        </details>
+                    {% endif %}
+                </div>
+                <form action="{{ url_for('update_installieren') }}" method="POST"
+                      onsubmit="this.querySelector('button').disabled = true; this.querySelector('button').textContent = 'Update läuft …';">
+                    <button type="submit" class="btn btn-primary">Jetzt aktualisieren</button>
+                </form>
+            </div>
+        {% endif %}
+
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 <div class="flash-messages">
@@ -377,5 +450,12 @@
         
         {% block content %}{% endblock %}
     </div>
+
+    <footer>
+        <span>Version {{ app_version }}</span>
+        <form action="{{ url_for('update_pruefen') }}" method="POST">
+            <button type="submit" class="link-button">Nach Updates suchen</button>
+        </form>
+    </footer>
 </body>
 </html>

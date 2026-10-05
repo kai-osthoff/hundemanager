@@ -1,15 +1,22 @@
 # app.py - Hauptanwendung
-from flask import Flask, render_template, request, redirect, url_for, flash, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
 import io
+import os
+import secrets
+import subprocess
+import sys
+import threading
+import time
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from sqlalchemy import func #NEU
+from sqlalchemy import func, inspect, text #NEU
+import updater
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'dein-geheimer-schluessel-hier-aendern'
+app.config['SECRET_KEY'] = secrets.token_hex(32)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///hundemanager.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -110,12 +117,12 @@ def person_bearbeiten(person_id):
     if request.method == 'POST':
         vorname = request.form.get('vorname', '').strip()
         nachname = request.form.get('nachname', '').strip()
-        person.fotofreigabe = request.form.get('fotofreigabe') == '1'
-        
+
         if not vorname or not nachname:
             flash('Bitte Vor- und Nachname angeben.', 'error')
             return render_template('person_form.html', person=person)
-        
+
+        person.fotofreigabe = request.form.get('fotofreigabe') == '1'
         person.vorname = vorname
         person.nachname = nachname
         db.session.commit()
@@ -355,8 +362,112 @@ def impfstatus_farbe(hund):
     return 'gruen'
 
 
+# --- Updates ---
+
+NEUSTART_CODE = 3  # start.py startet die App bei diesem Exit-Code neu
+# Beim Start festhalten - nach einem Update steht in VERSION schon die neue Nummer
+LAUFENDE_VERSION = updater.aktuelle_version()
+
+
+@app.context_processor
+def update_kontext():
+    return {
+        'app_version': LAUFENDE_VERSION,
+        'update_info': updater.update_status(),
+    }
+
+
+@app.route('/update/pruefen', methods=['POST'])
+def update_pruefen():
+    info = updater.pruefe_auf_update(erzwingen=True)
+    if info.get('fehler'):
+        flash(info['fehler'] + ' - bitte Internetverbindung prüfen.', 'error')
+    elif info['verfuegbar']:
+        flash(f'Version {info["version"]} ist verfügbar.', 'success')
+    else:
+        flash('Der Hundemanager ist auf dem neuesten Stand.', 'success')
+    return redirect(url_for('index'))
+
+
+@app.route('/update/installieren', methods=['POST'])
+def update_installieren():
+    erfolg, meldung = updater.installiere_update(db.engine.url.database)
+    if not erfolg:
+        flash(meldung, 'error')
+        return redirect(url_for('index'))
+
+    threading.Thread(target=neustart, daemon=True).start()
+    return render_template('update_fertig.html', meldung=meldung,
+                           alte_version=LAUFENDE_VERSION)
+
+
+@app.route('/api/version')
+def api_version():
+    return jsonify(version=LAUFENDE_VERSION)
+
+
+def neustart():
+    time.sleep(1.5)  # Antwortseite erst noch ausliefern
+    if os.environ.get('HUNDEMANAGER_LAUNCHER'):
+        os._exit(NEUSTART_CODE)  # start.py startet neu
+    # Ohne start.py gestartet (z.B. "python app.py"): selbst neu starten
+    env = dict(os.environ, HUNDEMANAGER_WARTEN='2')
+    subprocess.Popen([sys.executable] + sys.argv, env=env)
+    os._exit(0)
+
+
+# --- Datenbank-Migration ---
+
+def _sql_standardwert(spalte):
+    if spalte.default is None or not spalte.default.is_scalar:
+        return None
+    wert = spalte.default.arg
+    if isinstance(wert, bool):
+        return '1' if wert else '0'
+    if isinstance(wert, (int, float)):
+        return str(wert)
+    return "'" + str(wert).replace("'", "''") + "'"
+
+
+def migriere_datenbank():
+    """Ergänzt fehlende Tabellen/Spalten in einer bestehenden Datenbank.
+
+    db.create_all() legt nur neue Tabellen an, aber keine neuen Spalten.
+    Ohne diese Migration würde eine ältere Datenbank (z.B. aus v3/v4) nach
+    einem Update mit "no such column" abstürzen.
+    """
+    db_pfad = db.engine.url.database
+    inspektor = inspect(db.engine)
+    vorhandene_tabellen = set(inspektor.get_table_names())
+    gesichert = False
+
+    for tabelle in db.metadata.sorted_tables:
+        if tabelle.name not in vorhandene_tabellen:
+            continue  # wird unten von create_all() angelegt
+        vorhanden = {s['name'] for s in inspektor.get_columns(tabelle.name)}
+        for spalte in tabelle.columns:
+            if spalte.name in vorhanden:
+                continue
+            if not gesichert:
+                updater.sichere_datenbank(db_pfad, 'vor-migration')
+                gesichert = True
+            sql = f'ALTER TABLE {tabelle.name} ADD COLUMN {spalte.name} {spalte.type.compile(db.engine.dialect)}'
+            standard = _sql_standardwert(spalte)
+            if standard is not None:
+                sql += f' DEFAULT {standard}'
+            with db.engine.begin() as verbindung:
+                verbindung.execute(text(sql))
+            print(f'Datenbank aktualisiert: Spalte {tabelle.name}.{spalte.name} ergänzt')
+
+    db.create_all()
+
+
 if __name__ == '__main__':
+    time.sleep(float(os.environ.get('HUNDEMANAGER_WARTEN', 0)))
     with app.app_context():
-        db.create_all()
-    # app.run(debug=True, port=5000)
-    app.run(debug=True, host="0.0.0.0", port=5000)
+        migriere_datenbank()
+    updater.starte_hintergrund_pruefung()
+    port = int(os.environ.get('HUNDEMANAGER_PORT', 5000))
+    print(f'Hundemanager {LAUFENDE_VERSION} läuft auf http://127.0.0.1:{port}')
+    # Nur auf diesem PC erreichbar, ohne Debugger
+    app.run(host='127.0.0.1', port=port)

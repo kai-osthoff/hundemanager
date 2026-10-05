@@ -17,7 +17,7 @@
     </div>
     <div class="legende-item">
         <div class="legende-farbe legende-orange"></div>
-        <span>Läuft bald ab (< 1 Monat)</span>
+        <span>Läuft bald ab (&lt; 1 Monat)</span>
     </div>
     <div class="legende-item">
         <div class="legende-farbe legende-rot"></div>
@@ -44,7 +44,7 @@
         </thead>
         <tbody>
             {% for person in personen %}
-                <tr class="person-header">
+                <tr class="person-header {% if not person.aktiv %}inactive{% endif %}">
                     <td colspan="9">
                         <strong>{{ person.nachname }}, {{ person.vorname }}</strong>
                     </td>
@@ -67,10 +67,9 @@
                         </div>
                     </td>
                 </tr>
-				<tr class="person-header {% if not person.aktiv %}inactive{% endif %}">
                 {% if person.hunde %}
                     {% for hund in person.hunde %}
-                    <tr>
+                    <tr class="{% if not person.aktiv %}inactive{% endif %}">
                         <td></td>
                         <td><strong>{{ hund.name }}</strong></td>
                         <td>{{ hund.geburtstag|format_datum }}</td>
@@ -97,7 +96,7 @@
                     </tr>
                     {% endfor %}
                 {% else %}
-                    <tr>
+                    <tr class="{% if not person.aktiv %}inactive{% endif %}">
                         <td></td>
                         <td colspan="9" style="color: #6c757d; font-style: italic;">Noch keine Hunde angelegt</td>
                     </tr>

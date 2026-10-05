@@ -1,0 +1,37 @@
+<!-- templates/update_fertig.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="form-container" style="text-align: center;">
+    <h2>✅ {{ meldung }}</h2>
+    <p id="status" style="margin-top: 15px; color: #6c757d;">Der Hundemanager startet neu … bitte einen Moment warten.</p>
+    <p style="margin-top: 25px;"><a href="{{ url_for('index') }}" class="btn btn-secondary">Zur Übersicht</a></p>
+</div>
+
+<script>
+    // Warten, bis die neue Version läuft, dann zur Übersicht wechseln
+    const alteVersion = {{ alte_version|tojson }};
+    const start = Date.now();
+
+    async function pruefen() {
+        try {
+            const antwort = await fetch('{{ url_for("api_version") }}', {cache: 'no-store'});
+            const daten = await antwort.json();
+            if (daten.version !== alteVersion) {
+                window.location.href = '{{ url_for("index") }}';
+                return;
+            }
+        } catch (e) {
+            // Server startet gerade neu - einfach weiter warten
+        }
+        if (Date.now() - start > 60000) {
+            document.getElementById('status').textContent =
+                'Der Neustart dauert ungewöhnlich lange. Bitte das schwarze Fenster schließen und START.bat neu öffnen.';
+            return;
+        }
+        setTimeout(pruefen, 1000);
+    }
+
+    setTimeout(pruefen, 2000);
+</script>
+{% endblock %}
