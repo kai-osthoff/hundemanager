@@ -18,6 +18,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from sqlalchemy import func, inspect, text #NEU
 import backup
 import bilder
+import mailto
 import nachweise
 import updater
 import whatsapp
@@ -66,19 +67,35 @@ class Person(db.Model):
             return 'widerrufen'  # nach einem Widerruf nicht erneut nachfragen
         return 'ohne-nachweis' if self.fotofreigabe else 'fehlt'
 
+    def _fotoeinwilligung_nachricht(self, kanal):
+        """Bitte um die Einwilligung mit Link zum Formular - None, wenn nichts zu fragen ist."""
+        if self.foto_status not in ('fehlt', 'ohne-nachweis'):
+            return None
+        return whatsapp.fotoeinwilligung_nachricht(
+            self.vorname, [h.name for h in sorted(self.hunde, key=lambda h: h.name.lower())],
+            einstellung('fotoeinwilligung_link'), kanal)
+
     @property
     def fotoeinwilligung_anfrage(self):
         """WhatsApp-Nachricht mit Link zum Formular - None, wenn nichts zu fragen ist oder die Nummer fehlt."""
-        if self.foto_status not in ('fehlt', 'ohne-nachweis'):
-            return None
-        return whatsapp.link(self.mobil, whatsapp.fotoeinwilligung_nachricht(
-            self.vorname, [h.name for h in sorted(self.hunde, key=lambda h: h.name.lower())],
-            einstellung('fotoeinwilligung_link')))
+        text = self._fotoeinwilligung_nachricht('whatsapp')
+        return whatsapp.link(self.mobil, text) if text else None
+
+    @property
+    def fotoeinwilligung_mail(self):
+        """Dieselbe Anfrage als E-Mail - None, wenn nichts zu fragen ist oder die Adresse fehlt."""
+        text = self._fotoeinwilligung_nachricht('email')
+        return mailto.link(self.email, 'Einwilligung zu Fotoaufnahmen', text) if text else None
 
     @property
     def whatsapp_link(self):
         """Leerer Chat in WhatsApp Web - None ohne gültige Handynummer."""
         return whatsapp.link(self.mobil)
+
+    @property
+    def email_link(self):
+        """Leere E-Mail an den Halter - None ohne gültige Adresse."""
+        return mailto.link(self.email)
 
 class Hund(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -240,6 +257,21 @@ EINSTELLUNGEN = {
 }
 
 
+# Die Hilfe "E-Mails mit GMX schreiben" steht neben den E-Mail-Knöpfen, bis Saskia so oft
+# einen E-Mail-Link geklickt hat - danach nur noch unten im Fuß. Zähler in der Tabelle einstellung
+# (nicht in EINSTELLUNGEN, er gehört nicht in den Einstellungsdialog).
+MAIL_HILFE_BIS_KLICKS = 3
+MAIL_KLICKS = 'mail_klicks'
+
+
+def mail_klicks():
+    eintrag = db.session.get(Einstellung, MAIL_KLICKS)
+    try:
+        return int(eintrag.wert) if eintrag and eintrag.wert else 0
+    except ValueError:
+        return 0
+
+
 def einstellung(schluessel):
     """Gespeicherter Wert oder - wenn nie geändert - der Standard."""
     eintrag = db.session.get(Einstellung, schluessel)
@@ -330,10 +362,13 @@ def hund_ansicht(hund):
         haftpflicht = 'keine-angabe'
 
     nachfragen = fehlende_angaben(hund, impfungen, haftpflicht, nachweis)
-    whatsapp_nachfrage = None
+    whatsapp_nachfrage = email_nachfrage = None
     if nachfragen:
         whatsapp_nachfrage = whatsapp.link(hund.besitzer.mobil, whatsapp.fehlende_daten_nachricht(
             hund.besitzer.vorname, hund.name, nachfragen))
+        email_nachfrage = mailto.link(hund.besitzer.email, f'{hund.name}: fehlende Angaben',
+                                      whatsapp.fehlende_daten_nachricht(
+                                          hund.besitzer.vorname, hund.name, nachfragen, 'email'))
 
     stati = [i['status'] for i in impfungen] + [haftpflicht]
     if 'abgelaufen' in stati:
@@ -354,7 +389,9 @@ def hund_ansicht(hund):
         'gesamt_text': GESAMT_TEXT[gesamt],
         'nachfragen': nachfragen,
         'whatsapp_nachfrage': whatsapp_nachfrage,
+        'email_nachfrage': email_nachfrage,
         'impf_nachfrage': impf_nachfrage(hund, impfungen),
+        'impf_mail': impf_nachfrage(hund, impfungen, 'email'),
     }
 
 
@@ -371,14 +408,16 @@ def impf_punkte(impfungen):
     return punkte
 
 
-def impf_nachfrage(hund, impfungen):
-    """WhatsApp-Link: Bitte um ein Foto der Impfpass-Seite - None, wenn alles gültig ist
-    oder die Handynummer fehlt."""
+def impf_nachfrage(hund, impfungen, kanal='whatsapp'):
+    """WhatsApp- bzw. E-Mail-Link: Bitte um ein Foto der Impfpass-Seite - None, wenn alles
+    gültig ist oder Handynummer bzw. Adresse fehlen."""
     punkte = impf_punkte(impfungen)
     if not punkte:
         return None
-    return whatsapp.link(hund.besitzer.mobil, whatsapp.impfpass_nachricht(
-        hund.besitzer.vorname, hund.name, punkte))
+    text = whatsapp.impfpass_nachricht(hund.besitzer.vorname, hund.name, punkte, kanal)
+    if kanal == 'email':
+        return mailto.link(hund.besitzer.email, f'{hund.name}: Impfpass', text)
+    return whatsapp.link(hund.besitzer.mobil, text)
 
 
 def fehlende_angaben(hund, impfungen, haftpflicht, nachweis):
@@ -904,7 +943,8 @@ def impfungen_faellig(personen, heute):
             if impfungen:
                 faellig.append({'hund': hund, 'impfungen': impfungen,
                                 'frueheste': min(i['datum'] for i in impfungen),
-                                'whatsapp': ansicht['impf_nachfrage']})
+                                'whatsapp': ansicht['impf_nachfrage'],
+                                'email': ansicht['impf_mail']})
     return sorted(faellig, key=lambda f: (f['frueheste'], f['hund'].name.lower()))
 
 
@@ -1234,6 +1274,23 @@ def einstellungen_kontext():
     # Für den Einstellungsdialog im Kopf jeder Seite
     return {'einstellungen_info': EINSTELLUNGEN,
             'einstellungen_werte': {s: einstellung(s) for s in EINSTELLUNGEN}}
+
+
+@app.context_processor
+def mail_hilfe_kontext():
+    return {'mail_hilfe_zeigen': mail_klicks() < MAIL_HILFE_BIS_KLICKS}
+
+
+@app.route('/email/geklickt', methods=['POST'])
+def email_geklickt():
+    """Ein E-Mail-Link wurde geklickt (meldet base.html) - zählt bis zum Ausblenden der Hilfe."""
+    klicks = mail_klicks()
+    if klicks < MAIL_HILFE_BIS_KLICKS:
+        eintrag = db.session.get(Einstellung, MAIL_KLICKS) or Einstellung(schluessel=MAIL_KLICKS)
+        eintrag.wert = str(klicks + 1)
+        db.session.add(eintrag)
+        db.session.commit()
+    return '', 204
 
 
 @app.route('/update/pruefen', methods=['POST'])

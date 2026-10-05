@@ -44,7 +44,17 @@
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1.4-4.2A8 8 0 1 1 8.3 20.7z"/><path d="M9 10h6M9 13.5h4"/></svg>
                 <span>Foto vom Impfpass per WhatsApp bei {{ hund.besitzer.vorname }} anfragen</span>
             </a>
-        {% elif ansicht.impfungen|selectattr('status', 'in', ['abgelaufen', 'bald-ablaufend', 'keine-angabe'])|list %}
+        {% endif %}
+        {% if ansicht.impf_mail %}
+            <div class="mail-reihe" style="margin-bottom: 8px;">
+                <a href="{{ ansicht.impf_mail }}" class="wa-zeile mail-zeile">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
+                    <span>Foto vom Impfpass per E-Mail bei {{ hund.besitzer.vorname }} anfragen</span>
+                </a>
+                {% include '_mail_hilfe_knopf.html' %}
+            </div>
+        {% endif %}
+        {% if not ansicht.impf_nachfrage and not ansicht.impf_mail and ansicht.impfungen|selectattr('status', 'in', ['abgelaufen', 'bald-ablaufend', 'keine-angabe'])|list %}
             <div class="wa-zeile wa-ohne-nummer" style="margin-bottom: 8px;">
                 <span>Für eine WhatsApp-Nachfrage fehlt die Handynummer.</span>
                 <a href="{{ url_for('person_bearbeiten', person_id=hund.besitzer.id) }}">Nummer eintragen</a>

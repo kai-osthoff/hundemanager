@@ -12,6 +12,8 @@ import urllib.parse
 WEB_ADRESSE = 'https://web.whatsapp.com/send'
 LANDESVORWAHL = '49'  # Nummern wie 0171 ... sind deutsche Handynummern
 ABSENDER = 'Saskia'
+# Wie der Halter antworten soll - dieselben Texte gehen auch per E-Mail raus
+ANTWORT_WEG = {'whatsapp': 'hier per WhatsApp', 'email': 'als Antwort auf diese E-Mail'}
 
 _ERLAUBT = re.compile(r'^\+?[0-9 ()/.\-]+$')
 
@@ -51,28 +53,28 @@ def link(handynummer, text=''):
     return WEB_ADRESSE + '?' + urllib.parse.urlencode(parameter, quote_via=urllib.parse.quote)
 
 
-def fehlende_daten_nachricht(vorname, hundename, punkte):
+def fehlende_daten_nachricht(vorname, hundename, punkte, kanal='whatsapp'):
     """Freundliche Bitte um die fehlenden Angaben. punkte: Liste kurzer Zeilen."""
     zeilen = [f'Hallo {vorname},', '',
               f'für {hundename} fehlen mir noch ein paar Angaben:']
     zeilen += [f'• {p}' for p in punkte]
-    zeilen += ['', 'Schick mir einfach ein Foto vom Impfpass bzw. den Nachweis hier per WhatsApp.',
+    zeilen += ['', f'Schick mir einfach ein Foto vom Impfpass bzw. den Nachweis {ANTWORT_WEG[kanal]}.',
                '', 'Danke und viele Grüße', ABSENDER]
     return '\n'.join(zeilen)
 
 
-def impfpass_nachricht(vorname, hundename, punkte):
+def impfpass_nachricht(vorname, hundename, punkte, kanal='whatsapp'):
     """Bitte um ein Foto der Impfpass-Seite, wenn Impfungen abgelaufen, bald fällig oder unbekannt sind."""
     zeilen = [f'Hallo {vorname},', '',
               f'bei {hundename} ist im Impfpass etwas abgelaufen, bald fällig oder mir noch nicht bekannt:']
     zeilen += [f'• {p}' for p in punkte]
-    zeilen += ['', 'Bitte schick mir ein Foto der Impfpass-Seite mit der aktuellen Impfung hier per WhatsApp '
+    zeilen += ['', f'Bitte schick mir ein Foto der Impfpass-Seite mit der aktuellen Impfung {ANTWORT_WEG[kanal]} '
                '– bei einer Auffrischung gern, sobald sie gemacht ist.',
                '', 'Danke und viele Grüße', ABSENDER]
     return '\n'.join(zeilen)
 
 
-def fotoeinwilligung_nachricht(vorname, hundenamen, formular_link):
+def fotoeinwilligung_nachricht(vorname, hundenamen, formular_link, kanal='whatsapp'):
     """Bitte um die unterschriebene Einwilligung zu Fotoaufnahmen - mit Link zum Formular."""
     if len(hundenamen) > 1:
         mit = ' mit ' + ', '.join(hundenamen[:-1]) + ' und ' + hundenamen[-1]
@@ -85,6 +87,6 @@ def fotoeinwilligung_nachricht(vorname, hundenamen, formular_link):
               '(z. B. für Website, Berichte oder Flyer), brauche ich noch deine unterschriebene '
               'Einwilligung zu Fotoaufnahmen.', '',
               'Hier ist das Formular zum Ausdrucken:', formular_link, '',
-              'Bitte ausfüllen, unterschreiben und mir ein Foto oder einen Scan hier per WhatsApp schicken.',
+              f'Bitte ausfüllen, unterschreiben und mir ein Foto oder einen Scan {ANTWORT_WEG[kanal]} schicken.',
               '', 'Danke und viele Grüße', ABSENDER]
     return '\n'.join(zeilen)

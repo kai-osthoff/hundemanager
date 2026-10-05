@@ -1,0 +1,3 @@
+{# Hilfe neben E-Mail-Knöpfen - nur, bis Saskia ein paar E-Mail-Links geklickt hat (mail_hilfe_zeigen) #}
+{% if mail_hilfe_zeigen %}<button type="button" class="mail-hilfe-knopf" title="Wie öffnet sich die E-Mail in GMX?"
+    onclick="var d = document.getElementById('mail-hilfe'); if (d && d.showModal) d.showModal();">? GMX-Hilfe</button>{% endif %}

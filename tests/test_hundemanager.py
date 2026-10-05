@@ -1107,6 +1107,97 @@ class WhatsAppOberflaecheTests(unittest.TestCase):
         self.assertIn('target="whatsapp"', seite)
 
 
+class MailtoTests(unittest.TestCase):
+    """mailto:-Links: Empfänger, Betreff und Text so codiert, dass GMX MailCheck sie übernimmt."""
+
+    def setUp(self):
+        self.mt = lade_modul(os.path.join(REPO, 'mailto.py'), 'mailto_test')
+
+    def test_link_ohne_und_mit_text(self):
+        self.assertEqual(self.mt.link(' juergen@example.org '), 'mailto:juergen@example.org')
+        for falsch in ('', None, 'kein-at-zeichen', 'a b@example.org', 'a@b'):
+            self.assertIsNone(self.mt.link(falsch), falsch)
+        text = 'Hallo Zoë,\nImpfung SHP/DAP/DHP & L: 50 %? a+b'
+        link = self.mt.link('juergen@example.org', 'Bello: Impfpass', text)
+        self.assertTrue(link.startswith('mailto:juergen@example.org?'))
+        self.assertNotIn(' ', link)
+        self.assertNotIn('+', link)  # sonst liest der Browser ein Leerzeichen
+        # So liest MailCheck die Parameter (URLSearchParams)
+        abfrage = urllib.parse.parse_qs(urllib.parse.urlsplit(link).query)
+        self.assertEqual(abfrage['subject'], ['Bello: Impfpass'])
+        self.assertEqual(abfrage['body'], [text.replace('\n', '\r\n')])
+
+    def test_texte_fuer_email(self):
+        wa = lade_modul(os.path.join(REPO, 'whatsapp.py'), 'whatsapp_test')
+        for text in (wa.fehlende_daten_nachricht('A', 'Bello', ['Geburtstag'], 'email'),
+                     wa.impfpass_nachricht('A', 'Bello', ['Impfung L: Datum fehlt noch'], 'email'),
+                     wa.fotoeinwilligung_nachricht('A', ['Bello'], 'https://example.org/f.pdf', 'email')):
+            self.assertIn('als Antwort auf diese E-Mail', text)
+            self.assertNotIn('WhatsApp', text)
+        self.assertIn('hier per WhatsApp', wa.fehlende_daten_nachricht('A', 'Bello', ['Geburtstag']))
+
+
+class EmailOberflaecheTests(unittest.TestCase):
+    """E-Mail-Knöpfe neben WhatsApp und die GMX-Hilfe, die nach ein paar Klicks verschwindet."""
+
+    setUp = HaftpflichtOberflaecheTests.setUp
+    tearDown = HaftpflichtOberflaecheTests.tearDown
+    oeffne = HaftpflichtOberflaecheTests.oeffne
+
+    def mailto_links(self, seite):
+        return [html_unescape(l) for l in re.findall(r'href="(mailto:[^"]+)"', seite)]
+
+    def test_email_knoepfe_und_hilfe(self):
+        seite = self.oeffne('/').decode('utf-8')
+        self.assertEqual(self.mailto_links(seite), [])
+        self.assertNotIn('? GMX-Hilfe', seite)  # ohne E-Mail-Knopf keine Hilfe daneben
+        self.assertIn('Hilfe: E-Mail', seite)  # die Anleitung bleibt unten erreichbar
+        self.assertIn('Für eine WhatsApp-Nachfrage fehlt die Handynummer', seite)
+
+        # Nur E-Mail, keine Handynummer
+        self.oeffne('/person/1/bearbeiten', urllib.parse.urlencode(
+            {'vorname': 'Jürgen', 'nachname': 'Müller', 'email': 'juergen@example.org'}).encode())
+        seite = self.oeffne('/').decode('utf-8')
+        links = self.mailto_links(seite)
+        self.assertIn('mailto:juergen@example.org', links)  # freie Nachricht
+        texte = {}
+        for l in links:
+            abfrage = urllib.parse.parse_qs(urllib.parse.urlsplit(l).query)
+            if 'subject' in abfrage:
+                texte[abfrage['subject'][0]] = abfrage['body'][0]
+        self.assertEqual(set(texte), {'Bello: fehlende Angaben', 'Luna: fehlende Angaben',
+                                      'Einwilligung zu Fotoaufnahmen'})
+        self.assertIn('Hallo Jürgen,', texte['Luna: fehlende Angaben'])
+        self.assertIn('• Geburtstag', texte['Luna: fehlende Angaben'])
+        self.assertIn('als Antwort auf diese E-Mail', texte['Luna: fehlende Angaben'])
+        self.assertIn('per E-Mail anfragen', seite)
+        self.assertIn('? GMX-Hilfe', seite)
+        self.assertIn('E-Mail Links in Webseiten mit MailCheck öffnen', seite)
+
+        # Impfpass-Seite und fällige Impfungen
+        seite = self.oeffne('/hund/2/nachweise?art=impfpass').decode('utf-8')
+        self.assertIn('Foto vom Impfpass per E-Mail', seite)
+        self.assertEqual([urllib.parse.parse_qs(urllib.parse.urlsplit(l).query)['subject'][0]
+                          for l in self.mailto_links(seite)], ['Luna: Impfpass'])
+        self.assertNotIn('fehlt die Handynummer', seite)
+
+        # Nach drei geklickten E-Mail-Links verschwindet die Hilfe neben den Knöpfen
+        for _ in range(3):
+            self.assertIn('? GMX-Hilfe', self.oeffne('/').decode('utf-8'))
+            self.oeffne('/email/geklickt', b'')
+        seite = self.oeffne('/').decode('utf-8')
+        self.assertNotIn('? GMX-Hilfe', seite)
+        self.assertIn('Hilfe: E-Mail', seite)
+        self.oeffne('/email/geklickt', b'')
+        with closing(sqlite3.connect(self.db)) as v:
+            self.assertEqual(v.execute("SELECT wert FROM einstellung WHERE schluessel = 'mail_klicks'").fetchone(),
+                             ('3',))
+        # Der Zähler gehört nicht in den Einstellungsdialog und übersteht "Standard wiederherstellen"
+        self.assertNotIn('mail_klicks', self.oeffne('/einstellungen').decode('utf-8'))
+        self.oeffne('/einstellungen', urllib.parse.urlencode({'standard': '1'}).encode())
+        self.assertNotIn('? GMX-Hilfe', self.oeffne('/').decode('utf-8'))
+
+
 class FotoeinwilligungTests(unittest.TestCase):
     """Fotoeinwilligung je Halter: Anfrage per WhatsApp mit Formular-Link, Nachweis, Widerruf."""
 

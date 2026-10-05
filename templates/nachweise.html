@@ -43,9 +43,12 @@
                     <td>{{ f.hund.besitzer.vollstaendiger_name }}</td>
                     <td>
                         <div class="person-actions">
+                            {% if f.email %}
+                            <a href="{{ f.email }}" class="knopf knopf-mail">E-Mail-Nachfrage</a>
+                            {% endif %}
                             {% if f.whatsapp %}
                             <a href="{{ f.whatsapp }}" target="whatsapp" rel="noopener" class="knopf knopf-whatsapp">WhatsApp-Nachfrage</a>
-                            {% else %}
+                            {% elif not f.email %}
                             <a href="{{ url_for('person_bearbeiten', person_id=f.hund.besitzer.id) }}" class="knopf" title="Für WhatsApp fehlt die Handynummer">Handynummer fehlt</a>
                             {% endif %}
                             <a href="{{ url_for('hund_nachweise', hund_id=f.hund.id, art='impfpass') }}" class="knopf">Impfpass hochladen</a>

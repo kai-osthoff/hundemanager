@@ -149,9 +149,23 @@ Programm passiert erst nach einer geprüften Sicherung.**
   (`https://web.whatsapp.com/send?phone=<international>&text=<URL-codiert>`), die WhatsApp Web
   im Browser öffnen. Saskia schickt selbst ab – die App versendet nie etwas.
 - Halter haben `mobil` (so wie eingegeben gespeichert, `whatsapp.nummer()` macht daraus
-  `49171…`; deutsche Nummern ohne Vorwahl gelten als +49) und `email` (noch ohne Funktion).
+  `49171…`; deutsche Nummern ohne Vorwahl gelten als +49) und `email`.
 - Hundekarten mit fehlenden/abgelaufenen/bald fälligen Angaben bekommen eine vorausgefüllte
   Nachfrage (`fehlende_angaben()` in app.py). Datenschutz: echte Nummern nie in Tests.
+
+## E-Mail an Halter
+
+- Neben jedem WhatsApp-Knopf ein E-Mail-Knopf, wenn eine Adresse hinterlegt ist – gleiche Texte
+  (`kanal='email'` in den `whatsapp.*_nachricht`-Funktionen), dazu ein Betreff.
+- `mailto.py` baut nur normale `mailto:`-Links (Betreff/Text URL-codiert, `%20` statt `+`,
+  Zeilen mit `%0D%0A`). GMX hat **keinen** Verfassen-Link mit URL-Parametern (recherchiert: alte
+  Links hängen an der Sitzung, selbst die GMX-Erweiterung nutzt eine interne Schnittstelle).
+  GMX öffnet sich über die Erweiterung **GMX MailCheck** mit der Einstellung „E-Mail Links in
+  Webseiten mit MailCheck öffnen“; ohne sie öffnet Windows sein Standard-Mailprogramm.
+- Hilfe dazu: Dialog `mail-hilfe` in base.html (immer über „Hilfe: E-Mail“ im Fuß erreichbar).
+  Der Knopf „? GMX-Hilfe“ neben den E-Mail-Knöpfen verschwindet nach `MAIL_HILFE_BIS_KLICKS`
+  geklickten E-Mail-Links; der Zähler steht als `mail_klicks` in der Tabelle `einstellung`
+  (bewusst nicht in `EINSTELLUNGEN`). Datenschutz: echte Adressen nie in Tests.
 
 ## Fotoeinwilligung (je Halter) und Einstellungen
 

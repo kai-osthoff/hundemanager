@@ -58,6 +58,13 @@
             {% if person.fotoeinwilligung_anfrage %}
             <a href="{{ person.fotoeinwilligung_anfrage }}" target="whatsapp" rel="noopener" class="knopf knopf-whatsapp" title="Einwilligung zu Fotoaufnahmen mit Link zum Formular per WhatsApp anfragen"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg> Fotoeinwilligung anfragen</a>
             {% endif %}
+            {% if person.email_link %}
+            <a href="{{ person.email_link }}" class="knopf knopf-mail" title="E-Mail an {{ person.email }} schreiben"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg> E-Mail</a>
+            {% if person.fotoeinwilligung_mail %}
+            <a href="{{ person.fotoeinwilligung_mail }}" class="knopf knopf-mail" title="Einwilligung zu Fotoaufnahmen mit Link zum Formular per E-Mail anfragen"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg> Fotoeinwilligung per E-Mail</a>
+            {% endif %}
+            {% include '_mail_hilfe_knopf.html' %}
+            {% endif %}
             <a href="{{ url_for('hund_neu', person_id=person.id) }}" class="knopf">+ Hund</a>
             <a href="{{ url_for('person_bearbeiten', person_id=person.id) }}" class="knopf">Bearbeiten</a>
             <form action="{{ url_for('person_toggle_aktiv', person_id=person.id) }}" method="POST">
@@ -111,7 +118,17 @@
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1.4-4.2A8 8 0 1 1 8.3 20.7z"/><path d="M9 10h6M9 13.5h4"/></svg>
                     <span>{{ h.nachfragen|length }} fehlende {{ 'Angabe' if h.nachfragen|length == 1 else 'Angaben' }} per WhatsApp anfragen</span>
                 </a>
-                {% else %}
+                {% endif %}
+                {% if h.email_nachfrage %}
+                <div class="mail-reihe">
+                    <a href="{{ h.email_nachfrage }}" class="wa-zeile mail-zeile" title="{{ h.nachfragen|join(' · ') }}">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
+                        <span>{{ h.nachfragen|length }} fehlende {{ 'Angabe' if h.nachfragen|length == 1 else 'Angaben' }} per E-Mail anfragen</span>
+                    </a>
+                    {% include '_mail_hilfe_knopf.html' %}
+                </div>
+                {% endif %}
+                {% if not h.whatsapp_nachfrage and not h.email_nachfrage %}
                 <div class="wa-zeile wa-ohne-nummer">
                     <span>Für eine WhatsApp-Nachfrage fehlt die Handynummer.</span>
                     <a href="{{ url_for('person_bearbeiten', person_id=person.id) }}">Nummer eintragen</a>

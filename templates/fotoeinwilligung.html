@@ -29,9 +29,13 @@
 
     {% if foto in ('fehlt', 'ohne-nachweis') %}
     <div class="halter-aktionen" style="margin-bottom: 8px;">
+        {% if person.fotoeinwilligung_mail %}
+        <a href="{{ person.fotoeinwilligung_mail }}" class="knopf knopf-mail">Per E-Mail anfragen (mit Link zum Formular)</a>
+        {% include '_mail_hilfe_knopf.html' %}
+        {% endif %}
         {% if person.fotoeinwilligung_anfrage %}
         <a href="{{ person.fotoeinwilligung_anfrage }}" target="whatsapp" rel="noopener" class="knopf knopf-whatsapp">Per WhatsApp anfragen (mit Link zum Formular)</a>
-        {% else %}
+        {% elif not person.fotoeinwilligung_mail %}
         <a href="{{ url_for('person_bearbeiten', person_id=person.id) }}" class="knopf">Für eine WhatsApp-Anfrage Handynummer eintragen</a>
         {% endif %}
         <a href="{{ formular_link }}" target="_blank" rel="noopener" class="knopf">Leeres Formular öffnen ↗</a>

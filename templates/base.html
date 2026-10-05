@@ -699,6 +699,27 @@
         }
         a.wa-zeile:hover { border-color: #0B5A2E; }
         .wa-ohne-nummer { justify-content: space-between; flex-wrap: wrap; border-style: dashed; border-color: #C9D6CC; background: #FFFFFF; color: #55625A; font-weight: 500; }
+        .knopf-mail { gap: 6px; color: #1C3F8C; border-color: #AFC3EA; background: #EEF3FC; }
+        .knopf-mail:hover { border-color: #1C3F8C; }
+        .mail-zeile { border-color: #AFC3EA; background: #EEF3FC; color: #1C3F8C; }
+        a.mail-zeile:hover { border-color: #1C3F8C; }
+        .mail-reihe { display: flex; gap: 6px; align-items: stretch; }
+        .mail-reihe .mail-zeile { flex: 1; }
+        .mail-hilfe-knopf {
+            border: 1px dashed #AFC3EA;
+            border-radius: 12px;
+            background: #FFFFFF;
+            color: #1C3F8C;
+            font: inherit;
+            font-size: 0.85rem;
+            padding: 6px 10px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .mail-hilfe-knopf:hover { border-style: solid; }
+        .mail-hilfe ol { margin: 10px 0 14px 22px; }
+        .mail-hilfe li { margin-bottom: 6px; }
+        .mail-hilfe p { margin-bottom: 10px; }
         a.etikett { text-decoration: none; }
         .form-group small { display: block; margin-top: 4px; font-size: 0.85rem; color: #55625A; }
         .hund-fuss {
@@ -828,13 +849,47 @@
     </dialog>
     {% endif %}
 
+    <dialog id="mail-hilfe" class="einstellungen-dialog mail-hilfe" aria-labelledby="mail-hilfe-titel">
+        <h2 id="mail-hilfe-titel">E-Mails mit GMX schreiben</h2>
+        <p>Ein Klick auf einen E-Mail-Knopf öffnet eine fertige Nachricht: Empfänger, Betreff und Text
+        sind schon eingetragen. Damit dafür <strong>GMX im Browser</strong> aufgeht, braucht es einmalig die
+        kostenlose GMX-Erweiterung <strong>MailCheck</strong>:</p>
+        <ol>
+            <li>MailCheck im Browser installieren –
+                <a href="https://hilfe.gmx.net/mailcheck/chrome/installation.html" target="_blank" rel="noopener">Anleitung für Chrome ↗</a>,
+                <a href="https://addons.mozilla.org/de/firefox/addon/gmx-mailcheck/" target="_blank" rel="noopener">für Firefox ↗</a>.</li>
+            <li>Oben rechts auf das MailCheck-Symbol klicken und mit dem GMX-Konto anmelden.</li>
+            <li>In MailCheck die <strong>Einstellungen</strong> öffnen, dort <strong>„Allgemein“</strong>, und den Haken setzen bei
+                <strong>„E-Mail Links in Webseiten mit MailCheck öffnen“</strong>.</li>
+            <li>Den Hundemanager einmal neu laden (Taste <strong>F5</strong>).</li>
+        </ol>
+        <p><strong>Danach:</strong> Auf einen E-Mail-Knopf klicken → es erscheint ein kleines Fenster
+        „E-Mail schreiben“ → <strong>„MailCheck“</strong> wählen. GMX öffnet die Nachricht. Gesendet wird erst,
+        wenn du dort selbst auf „Senden“ klickst – du kannst den Text vorher noch ändern.</p>
+        <p style="color: #55625A; font-size: 0.9rem;">Ohne MailCheck öffnet Windows stattdessen sein eingestelltes
+        Mailprogramm (z. B. Outlook). Nach ein paar verschickten E-Mails verschwindet der Knopf „GMX-Hilfe“ –
+        diese Anleitung findest du dann unten unter „Hilfe: E-Mail“.</p>
+        <div class="dialog-aktionen">
+            <button type="button" class="btn btn-primary" onclick="this.closest('dialog').close();">Verstanden</button>
+        </div>
+    </dialog>
+
     <footer>
         <span>Version {{ app_version }}</span>
         <a href="{{ url_for('nachweise_uebersicht') }}" class="link-button">Nachweise</a>
         <a href="{{ url_for('sicherungen') }}" class="link-button">Sicherungen</a>
         <a href="{{ url_for('einstellungen') }}" class="link-button">Einstellungen</a>
+        <a href="#mail-hilfe" class="link-button"
+           onclick="var d = document.getElementById('mail-hilfe'); if (d && d.showModal) { d.showModal(); return false; }">Hilfe: E-Mail</a>
     </footer>
     <script>
+        // Geklickte E-Mail-Links zählen - nach ein paar Klicks blendet die App die GMX-Hilfe aus.
+        // Fester Pfad statt url_for - ältere Versionen rendern diese Vorlage beim Update mit.
+        document.addEventListener('click', function (ereignis) {
+            var link = ereignis.target.closest && ereignis.target.closest('a[href^="mailto:"]');
+            if (link) fetch('/email/geklickt', {method: 'POST', keepalive: true}).catch(function () {});
+        }, true);
+
         // Neue Version auch ohne Neuladen anzeigen: jede Minute den Update-Knopf nachfragen.
         // Fester Pfad statt url_for - ältere Versionen rendern diese Vorlage beim Update mit.
         setInterval(function () {
