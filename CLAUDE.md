@@ -54,6 +54,24 @@ Entwickelt wird auf macOS, aber „läuft auf dem Mac“ heißt **nicht** fertig
   sind kurz gesperrt – Löschen/Ersetzen immer mit Wiederholung (`_mit_wiederholung`).
   In der VM gibt es kein git; Befehle laufen über `prlctl exec "Windows 11" --current-user`.
 
+## Arbeitsweise: ein Worktree pro Aufgabe, danach atomar committen und mergen
+
+- **Jede Aufgabe bekommt einen eigenen Git-Worktree mit eigenem Branch** – nie direkt
+  auf `main` im Hauptordner arbeiten:
+  `git worktree add ../worktrees/<aufgabe> -b <typ>/<aufgabe>` (z. B. `fix/impfdatum`).
+  Worktrees liegen **außerhalb** von `hundemanager_v5/`, sonst kopiert
+  `windows-test.sh` (robocopy `/MIR`) sie mit in die VM.
+- Im Worktree gibt es kein `.venv` und kein `instance/`: Python aus dem Hauptordner
+  nehmen (`../../hundemanager_v5/.venv/bin/python …`); die App nie mit Saskias Daten
+  aus einem Worktree heraus starten.
+- **Abschluss jeder Aufgabe:** Tests grün (lokal + `./windows-test.sh`) → **ein
+  atomarer Commit** (genau eine logische Änderung, Commit-Nachricht auf Deutsch) →
+  ohne Rückfrage nach `main` mergen (`git merge --ff-only`, sonst vorher auf `main`
+  rebasen) → Worktree und Branch löschen
+  (`git worktree remove …` und `git branch -d …`).
+- Mehrere Aufgaben = mehrere Worktrees und mehrere Commits, nie gebündelt.
+- Merge ist kein Release: veröffentlicht wird weiterhin nur über `./release.sh`.
+
 ## ⚠️ Daten und Backups – nicht verhandelbar
 
 Saskias Daten liegen ausschließlich in `instance/hundemanager.db` – nie im Repo
