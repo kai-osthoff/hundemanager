@@ -31,7 +31,7 @@ PRUEF_INTERVALL = 6 * 60 * 60  # alle 6 Stunden automatisch nachsehen
 
 APP_DIR = backup.APP_DIR
 # Pflichtdateien - fehlt eine im Download, wird das Update gar nicht erst begonnen
-PFLICHTDATEIEN = ['app.py', 'updater.py', 'backup.py', 'nachweise.py', 'start.py', 'VERSION', 'requirements.txt']
+PFLICHTDATEIEN = ['app.py', 'updater.py', 'backup.py', 'nachweise.py', 'whatsapp.py', 'start.py', 'VERSION', 'requirements.txt']
 
 _status = {
     'geprueft_um': 0,

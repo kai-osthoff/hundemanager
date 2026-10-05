@@ -123,6 +123,16 @@ Programm passiert erst nach einer geprüften Sicherung.**
   Haftpflicht-PDFs); pypdf gibt Textblöcke in beliebiger Reihenfolge aus – Muster nie
   an der Reihenfolge festmachen.
 
+## WhatsApp an Halter
+
+- Kein externer Dienst, keine API: `whatsapp.py` baut nur Click-to-Chat-Links
+  (`https://web.whatsapp.com/send?phone=<international>&text=<URL-codiert>`), die WhatsApp Web
+  im Browser öffnen. Saskia schickt selbst ab – die App versendet nie etwas.
+- Halter haben `mobil` (so wie eingegeben gespeichert, `whatsapp.nummer()` macht daraus
+  `49171…`; deutsche Nummern ohne Vorwahl gelten als +49) und `email` (noch ohne Funktion).
+- Hundekarten mit fehlenden/abgelaufenen/bald fälligen Angaben bekommen eine vorausgefüllte
+  Nachfrage (`fehlende_angaben()` in app.py). Datenschutz: echte Nummern nie in Tests.
+
 ## Releases
 
 - **Versionen: nur 5.1.x, nur die letzte Stelle hochzählen** (5.1.1, 5.1.2, …).

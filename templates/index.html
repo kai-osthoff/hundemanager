@@ -36,8 +36,12 @@
             <h3>{{ person.nachname }}, {{ person.vorname }}</h3>
             {% if not person.aktiv %}<span class="etikett etikett-grau">Pausiert</span>{% endif %}
             {% if person.fotofreigabe %}<span class="etikett">Fotofreigabe</span>{% endif %}
+            {% if not person.mobil %}<a href="{{ url_for('person_bearbeiten', person_id=person.id) }}" class="etikett etikett-grau">Handynummer fehlt</a>{% endif %}
         </div>
         <div class="halter-aktionen">
+            {% if person.whatsapp_link %}
+            <a href="{{ person.whatsapp_link }}" target="whatsapp" rel="noopener" class="knopf knopf-whatsapp" title="Chat mit {{ person.vorname }} in WhatsApp Web öffnen"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1.4-4.2A8 8 0 1 1 8.3 18.7z"/><path d="M9 10h6M9 13.5h4"/></svg> WhatsApp</a>
+            {% endif %}
             <a href="{{ url_for('hund_neu', person_id=person.id) }}" class="knopf">+ Hund</a>
             <a href="{{ url_for('person_bearbeiten', person_id=person.id) }}" class="knopf">Bearbeiten</a>
             <form action="{{ url_for('person_toggle_aktiv', person_id=person.id) }}" method="POST">
@@ -83,6 +87,21 @@
                     <span>Hochladen</span>
                 {% endif %}
             </a>
+
+            {% if h.nachfragen %}
+                {% if h.whatsapp_nachfrage %}
+                <a href="{{ h.whatsapp_nachfrage }}" target="whatsapp" rel="noopener" class="wa-zeile"
+                   title="{{ h.nachfragen|join(' · ') }}">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1.4-4.2A8 8 0 1 1 8.3 20.7z"/><path d="M9 10h6M9 13.5h4"/></svg>
+                    <span>{{ h.nachfragen|length }} fehlende {{ 'Angabe' if h.nachfragen|length == 1 else 'Angaben' }} per WhatsApp anfragen</span>
+                </a>
+                {% else %}
+                <div class="wa-zeile wa-ohne-nummer">
+                    <span>Für eine WhatsApp-Nachfrage fehlt die Handynummer.</span>
+                    <a href="{{ url_for('person_bearbeiten', person_id=person.id) }}">Nummer eintragen</a>
+                </div>
+                {% endif %}
+            {% endif %}
 
             <div class="hund-fuss">
                 <span>{{ hund.bemerkung or '' }}</span>

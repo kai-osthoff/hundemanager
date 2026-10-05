@@ -6,6 +6,7 @@ from dateutil.relativedelta import relativedelta
 import io
 import json
 import os
+import re
 import secrets
 import subprocess
 import sys
@@ -18,6 +19,7 @@ from sqlalchemy import func, inspect, text #NEU
 import backup
 import nachweise
 import updater
+import whatsapp
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = secrets.token_hex(32)
@@ -36,12 +38,19 @@ class Person(db.Model):
     nachname = db.Column(db.String(100), nullable=False)
     aktiv = db.Column(db.Boolean, default=True)  # 👈v4
     fotofreigabe = db.Column(db.Boolean, default=False)  # 👈 NEU v5
+    mobil = db.Column(db.String(30), nullable=True)   # für WhatsApp, so wie eingegeben
+    email = db.Column(db.String(200), nullable=True)
     hunde = db.relationship('Hund', backref='besitzer', lazy=True, cascade='all, delete-orphan')
 
 
     @property
     def vollstaendiger_name(self):
         return f"{self.vorname} {self.nachname}"
+
+    @property
+    def whatsapp_link(self):
+        """Leerer Chat in WhatsApp Web - None ohne gültige Handynummer."""
+        return whatsapp.link(self.mobil)
 
 class Hund(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -196,6 +205,12 @@ def hund_ansicht(hund):
     else:
         haftpflicht = 'keine-angabe'
 
+    nachfragen = fehlende_angaben(hund, impfungen, haftpflicht, nachweis)
+    whatsapp_nachfrage = None
+    if nachfragen:
+        whatsapp_nachfrage = whatsapp.link(hund.besitzer.mobil, whatsapp.fehlende_daten_nachricht(
+            hund.besitzer.vorname, hund.name, nachfragen))
+
     stati = [i['status'] for i in impfungen] + [haftpflicht]
     if 'abgelaufen' in stati:
         gesamt = 'abgelaufen'
@@ -213,7 +228,30 @@ def hund_ansicht(hund):
         'haftpflicht': haftpflicht,
         'gesamt': gesamt,
         'gesamt_text': GESAMT_TEXT[gesamt],
+        'nachfragen': nachfragen,
+        'whatsapp_nachfrage': whatsapp_nachfrage,
     }
+
+
+def fehlende_angaben(hund, impfungen, haftpflicht, nachweis):
+    """Was beim Halter nachzufragen ist - je Punkt eine kurze Zeile für die Nachricht."""
+    punkte = []
+    for i in impfungen:
+        if i['status'] == 'keine-angabe':
+            punkte.append(f'Impfung {i["name"]}: Datum fehlt noch')
+        elif i['status'] == 'abgelaufen':
+            punkte.append(f'Impfung {i["name"]}: abgelaufen am {format_datum(i["datum"])}')
+        elif i['status'] == 'bald-ablaufend':
+            punkte.append(f'Impfung {i["name"]}: läuft am {format_datum(i["datum"])} ab')
+    if haftpflicht in ('keine-angabe', 'ohne-nachweis'):
+        punkte.append('Haftpflicht: Versicherungsnachweis fehlt noch')
+    elif haftpflicht == 'abgelaufen':
+        punkte.append(f'Haftpflicht: Nachweis abgelaufen am {format_datum(nachweis.gueltig_bis)}')
+    elif haftpflicht == 'bald-ablaufend':
+        punkte.append(f'Haftpflicht: Nachweis läuft am {format_datum(nachweis.gueltig_bis)} ab')
+    if not hund.geburtstag:
+        punkte.append('Geburtstag')
+    return punkte
 
 
 @app.route('/')
@@ -257,18 +295,35 @@ def index():
                            anzahl_pausiert=len(pausierte), kennzahlen=kennzahlen,
                            gibt_personen=bool(alle_personen))
 
+def _person_angaben(person):
+    """Übernimmt die Formularfelder. Gibt eine Fehlermeldung zurück oder None."""
+    vorname = request.form.get('vorname', '').strip()
+    nachname = request.form.get('nachname', '').strip()
+    mobil = request.form.get('mobil', '').strip()[:30]
+    email = request.form.get('email', '').strip()[:200]
+    if not vorname or not nachname:
+        return 'Bitte Vor- und Nachname angeben.'
+    if mobil and not whatsapp.nummer(mobil):
+        return 'Die Handynummer stimmt so nicht – bitte z. B. als 0171 1234567 oder +49 171 1234567 eingeben.'
+    if email and not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email):
+        return 'Die E-Mail-Adresse stimmt so nicht – bitte prüfen.'
+    person.vorname = vorname
+    person.nachname = nachname
+    person.fotofreigabe = request.form.get('fotofreigabe') == '1'
+    person.mobil = mobil or None
+    person.email = email or None
+    return None
+
+
 @app.route('/person/neu', methods=['GET', 'POST'])
 def person_neu():
     if request.method == 'POST':
-        vorname = request.form.get('vorname', '').strip()
-        nachname = request.form.get('nachname', '').strip()
-        fotofreigabe = request.form.get('fotofreigabe') == '1'
-        
-        if not vorname or not nachname:
-            flash('Bitte Vor- und Nachname angeben.', 'error')
-            return render_template('person_form.html', person=None)
-        
-        person = Person(vorname=vorname, nachname=nachname, fotofreigabe=fotofreigabe)
+        person = Person()
+        fehler = _person_angaben(person)
+        if fehler:
+            flash(fehler, 'error')
+            return render_template('person_form.html', person=None, werte=request.form)
+
         db.session.add(person)
         db.session.commit()
         flash(f'Person "{person.vollstaendiger_name}" wurde angelegt.', 'success')
@@ -281,16 +336,11 @@ def person_bearbeiten(person_id):
     person = Person.query.get_or_404(person_id)
     
     if request.method == 'POST':
-        vorname = request.form.get('vorname', '').strip()
-        nachname = request.form.get('nachname', '').strip()
+        fehler = _person_angaben(person)
+        if fehler:
+            flash(fehler, 'error')
+            return render_template('person_form.html', person=person, werte=request.form)
 
-        if not vorname or not nachname:
-            flash('Bitte Vor- und Nachname angeben.', 'error')
-            return render_template('person_form.html', person=person)
-
-        person.fotofreigabe = request.form.get('fotofreigabe') == '1'
-        person.vorname = vorname
-        person.nachname = nachname
         db.session.commit()
         flash(f'Person wurde aktualisiert.', 'success')
         return redirect(url_for('index'))
@@ -595,7 +645,7 @@ def export_excel():
     )
     
     # Header
-    headers = ['Nachname', 'Vorname', 'Foto', 'Hundename', 'Geburtstag', 'SHP/DAP/DHP', 'L', 'BbPi', 'T', 'Haftpflicht', 'Bemerkung']
+    headers = ['Nachname', 'Vorname', 'Foto', 'Hundename', 'Geburtstag', 'SHP/DAP/DHP', 'L', 'BbPi', 'T', 'Haftpflicht', 'Bemerkung', 'Handynummer', 'E-Mail']
     for col, header in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col, value=header)
         cell.fill = header_fill
@@ -662,10 +712,12 @@ def export_excel():
             haftpflicht_cell.alignment = Alignment(horizontal='center')
             
             ws.cell(row=row, column=11, value=hund.bemerkung or '').border = thin_border
+            ws.cell(row=row, column=12, value=person.mobil or '').border = thin_border
+            ws.cell(row=row, column=13, value=person.email or '').border = thin_border
             row += 1
     
     # Spaltenbreiten anpassen
-    column_widths = [15, 15, 7, 20, 12, 15, 12, 12, 12, 18, 30]
+    column_widths = [15, 15, 7, 20, 12, 15, 12, 12, 12, 18, 30, 18, 28]
     for i, width in enumerate(column_widths, 1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = width
     

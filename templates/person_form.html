@@ -2,29 +2,43 @@
 {% extends "base.html" %}
 
 {% block content %}
+{# Nach einem Fehler die eingegebenen Werte behalten, sonst die gespeicherten zeigen #}
+{% set w = werte or person or {} %}
 <div class="form-container">
     <h2>{{ 'Person bearbeiten' if person else 'Neue Person anlegen' }}</h2>
-    
+
     <form method="POST">
         <div class="form-group">
             <label for="vorname" class="required">Vorname</label>
-            <input type="text" id="vorname" name="vorname" value="{{ person.vorname if person else '' }}" required>
+            <input type="text" id="vorname" name="vorname" value="{{ w.vorname or '' }}" required>
         </div>
-        
+
         <div class="form-group">
             <label for="nachname" class="required">Nachname</label>
-            <input type="text" id="nachname" name="nachname" value="{{ person.nachname if person else '' }}" required>
+            <input type="text" id="nachname" name="nachname" value="{{ w.nachname or '' }}" required>
         </div>
-        
+
+        <div class="form-group">
+            <label for="mobil">Handynummer</label>
+            <input type="tel" id="mobil" name="mobil" value="{{ w.mobil or '' }}" maxlength="30"
+                   placeholder="z. B. 0171 1234567" autocomplete="off">
+            <small>Für Nachrichten per WhatsApp. Ausländische Nummern mit Ländervorwahl, z. B. +43 664 1234567.</small>
+        </div>
+
+        <div class="form-group">
+            <label for="email">E-Mail-Adresse</label>
+            <input type="email" id="email" name="email" value="{{ w.email or '' }}" maxlength="200" autocomplete="off">
+        </div>
+
 		<div class="form-group">
-			<label><input type="checkbox" name="fotofreigabe" value="1" {{ 'checked' if person and person.fotofreigabe }}> Fotofreigabe</label>
+			<label><input type="checkbox" name="fotofreigabe" value="1" {{ 'checked' if w.fotofreigabe }}> Fotofreigabe</label>
         </div>
-		
+
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">{{ 'Speichern' if person else 'Anlegen' }}</button>
             <a href="{{ url_for('index') }}" class="btn btn-secondary">Abbrechen</a>
         </div>
-		
+
     </form>
 </div>
 {% endblock %}

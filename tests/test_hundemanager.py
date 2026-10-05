@@ -890,5 +890,113 @@ class HaftpflichtOberflaecheTests(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(self.app_dir, 'instance', 'nachweise')))
 
 
+
+class WhatsAppTests(unittest.TestCase):
+    """Click-to-Chat-Links: Nummer international, Text URL-codiert, kein externer Dienst."""
+
+    def setUp(self):
+        self.wa = lade_modul(os.path.join(REPO, 'whatsapp.py'), 'whatsapp_test')
+
+    def test_uebliche_schreibweisen(self):
+        for eingabe in ('0171 1234567', '0171/123 45 67', '0171-1234567', '+49 171 1234567',
+                        '0049 171 1234567', '+49 (0) 171 1234567', '(0171) 1234567'):
+            self.assertEqual(self.wa.nummer(eingabe), '491711234567', eingabe)
+        self.assertEqual(self.wa.nummer('+43 664 1234567'), '436641234567')
+        self.assertEqual(self.wa.nummer(' 0151.23456789 '), '4915123456789')
+
+    def test_unsinnige_nummern(self):
+        for eingabe in ('', None, '   ', 'keine', '0171 12a4567', '123', '+49 171 1234567 1234567',
+                        '+0171 1234567', '00 0171 1234567'):
+            self.assertIsNone(self.wa.nummer(eingabe), eingabe)
+
+    def test_link_ohne_und_mit_text(self):
+        self.assertEqual(self.wa.link('0171 1234567'),
+                         'https://web.whatsapp.com/send?phone=491711234567')
+        self.assertIsNone(self.wa.link(''))
+        link = self.wa.link('0171 1234567', 'Hallo Zoë,\nImpfung SHP/DAP/DHP & L: 50 %?')
+        abfrage = urllib.parse.urlparse(link).query
+        self.assertNotIn(' ', link)
+        self.assertNotIn('+', abfrage)  # Leerzeichen als %20, nicht als +
+        self.assertEqual(urllib.parse.parse_qs(abfrage)['text'], ['Hallo Zoë,\nImpfung SHP/DAP/DHP & L: 50 %?'])
+        self.assertEqual(urllib.parse.parse_qs(abfrage)['phone'], ['491711234567'])
+
+    def test_nachricht_nennt_alle_punkte(self):
+        text = self.wa.fehlende_daten_nachricht('Jürgen', 'Bello', ['Impfung L: Datum fehlt noch', 'Geburtstag'])
+        self.assertTrue(text.startswith('Hallo Jürgen,'))
+        self.assertIn('für Bello', text)
+        self.assertIn('• Impfung L: Datum fehlt noch\n• Geburtstag', text)
+
+
+class WhatsAppOberflaecheTests(unittest.TestCase):
+    """Handynummer und E-Mail beim Halter, WhatsApp-Knöpfe in der Übersicht."""
+
+    setUp = HaftpflichtOberflaecheTests.setUp
+    tearDown = HaftpflichtOberflaecheTests.tearDown
+    oeffne = HaftpflichtOberflaecheTests.oeffne
+
+    def person_speichern(self, person_id, **felder):
+        werte = {'vorname': 'Jürgen', 'nachname': 'Müller'}
+        werte.update(felder)
+        return self.oeffne(f'/person/{person_id}/bearbeiten', urllib.parse.urlencode(werte).encode()).decode('utf-8')
+
+    def test_handynummer_und_email_am_halter(self):
+        # Die Datenbank ist von vor 5.1.4 - die neuen Spalten ergänzt die Migration
+        seite = self.oeffne('/').decode('utf-8')
+        self.assertIn('Handynummer fehlt', seite)
+        self.assertNotIn('web.whatsapp.com', seite)
+        self.assertIn('Für eine WhatsApp-Nachfrage fehlt die Handynummer', seite)
+
+        seite = self.person_speichern(1, mobil='0171 12a', email='juergen@example.org')
+        self.assertIn('Die Handynummer stimmt so nicht', seite)
+        self.assertIn('value="0171 12a"', seite)  # Eingabe bleibt stehen
+        seite = self.person_speichern(1, mobil='0171 1234567', email='kein-at-zeichen')
+        self.assertIn('Die E-Mail-Adresse stimmt so nicht', seite)
+
+        seite = self.person_speichern(1, mobil='0171 1234567', email='juergen@example.org', fotofreigabe='1')
+        self.assertIn('Person wurde aktualisiert', seite)
+        with closing(sqlite3.connect(self.db)) as v:
+            self.assertEqual(v.execute('SELECT mobil, email, fotofreigabe FROM person WHERE id = 1').fetchone(),
+                             ('0171 1234567', 'juergen@example.org', 1))
+        self.assertIn('value="0171 1234567"', self.oeffne('/person/1/bearbeiten').decode('utf-8'))
+
+        # Neue Person mit Nummer
+        neu = urllib.parse.urlencode({'vorname': 'Anna', 'nachname': 'Neu', 'mobil': '+43 664 1234567'}).encode()
+        self.assertIn('Person &#34;Anna Neu&#34; wurde angelegt', self.oeffne('/person/neu', neu).decode('utf-8'))
+
+        import openpyxl
+        mappe = openpyxl.load_workbook(io.BytesIO(self.oeffne('/export/excel')))
+        zeilen = list(mappe.active.iter_rows(values_only=True))
+        self.assertEqual(zeilen[0][11:13], ('Handynummer', 'E-Mail'))
+        self.assertIn(('0171 1234567', 'juergen@example.org'), [z[11:13] for z in zeilen[1:]])
+
+    def test_whatsapp_knoepfe_in_der_uebersicht(self):
+        self.person_speichern(1, mobil='0171 1234567')
+        seite = self.oeffne('/').decode('utf-8')
+        links = [html_unescape(l) for l in re.findall(r'href="(https://web\.whatsapp\.com/[^"]+)"', seite)]
+
+        # Freie Nachricht an den Halter: Chat ohne Text
+        self.assertIn('https://web.whatsapp.com/send?phone=491711234567', links)
+        # Bello hat SHP/DAP/DHP bis 2027 und Geburtstag, Luna hat gar nichts
+        texte = {}
+        for l in links:
+            abfrage = urllib.parse.parse_qs(urllib.parse.urlparse(l).query)
+            if 'text' in abfrage:
+                texte[re.search(r'für (\w+)', abfrage['text'][0]).group(1)] = abfrage['text'][0]
+        self.assertEqual(set(texte), {'Bello', 'Luna'})  # Rex/Fiete: Halter ohne Nummer
+        self.assertIn('Hallo Jürgen,', texte['Luna'])
+        self.assertIn('• Impfung SHP/DAP/DHP: Datum fehlt noch', texte['Luna'])
+        self.assertIn('• Haftpflicht: Versicherungsnachweis fehlt noch', texte['Luna'])
+        self.assertIn('• Geburtstag', texte['Luna'])
+        self.assertNotIn('SHP/DAP/DHP', texte['Bello'])
+        self.assertNotIn('Geburtstag', texte['Bello'])
+        self.assertIn('• Impfung L: Datum fehlt noch', texte['Bello'])
+        self.assertIn('target="whatsapp"', seite)
+
+
+def html_unescape(text):
+    import html
+    return html.unescape(text)
+
+
 if __name__ == '__main__':
     unittest.main()
