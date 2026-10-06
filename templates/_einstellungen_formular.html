@@ -95,6 +95,22 @@
         </div>
     </section>
 
+    <section class="einst-abschnitt">
+        <h3>Erinnerungen und Wiedervorlage</h3>
+        <div class="einst-zweispaltig">
+            {% for schluessel in ('wiedervorlage_tage', 'wiedervorlage_wartezeit') %}
+            {% set info = einstellungen_info[schluessel] %}
+            <div class="form-group">
+                <label for="einstellung-{{ schluessel }}">{{ info.name }}</label>
+                <input type="number" id="einstellung-{{ schluessel }}" name="{{ schluessel }}"
+                       value="{{ werte[schluessel] }}" min="1" max="{{ info.maximum }}" step="1"
+                       placeholder="{{ info.standard }}">
+                <small>{{ info.hilfe }} Leer = {{ info.standard }}.</small>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
     <div class="einst-fuss">
         <button type="submit" name="standard" value="1" class="einst-zuruecksetzen"
                 onclick="return confirm('Alle Einstellungen auf den Standard zurücksetzen?');">

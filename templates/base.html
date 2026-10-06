@@ -799,6 +799,8 @@
             font-size: 0.7rem;
             color: #55625A;
         }
+        .wiedervorlage { position: relative; z-index: 1; margin-top: 8px; font-size: 0.85rem; }
+        .wiedervorlage progress { display: block; width: 100%; height: 6px; margin: 6px 0; }
         .nachfrage span { flex: 1; }
         .nachfrage .mini-icon { width: 26px; height: 26px; }
         .hund-bemerkung { font-size: 0.7rem; color: #55625A; }
@@ -1099,6 +1101,8 @@
         <a href="#mail-hilfe" class="link-button"
            onclick="var d = document.getElementById('mail-hilfe'); if (d && d.showModal) { d.showModal(); return false; }">Hilfe: E-Mail</a>
     </footer>
+    <span id="wiedervorlage-config" data-wartezeit="{{ einstellungen_werte.wiedervorlage_wartezeit }}" hidden></span>
+    <script src="{{ url_for('static', filename='wiedervorlage.js') }}" defer></script>
     <script>
         // Einstellungen: Farbschema und WhatsApp-Vorschau live zeigen. Schließen ohne Speichern
         // setzt Formular und Farbschema zurück.

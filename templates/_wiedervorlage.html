@@ -1,0 +1,10 @@
+<div class="wiedervorlage" data-wiedervorlage="{{ hund.id }}"
+     data-url="{{ url_for('wiedervorlage_speichern', hund_id=hund.id) }}">
+    <div data-wiedervorlage-status role="status"{% if h.wiedervorlage_faellig %} class="status-cell status-abgelaufen"{% endif %}>{% if hund.wiedervorlage_am %}{{ 'Wiedervorlage fällig seit' if h.wiedervorlage_faellig else 'Wiedervorlage am' }} {{ hund.wiedervorlage_am|format_datum }}{% endif %}</div>
+    <div data-wiedervorlage-countdown hidden>
+        <span data-wiedervorlage-text></span>
+        <progress data-wiedervorlage-balken aria-label="Verbleibende Wartezeit"></progress>
+        <button type="button" class="mini" data-wiedervorlage-abbrechen>Abbrechen</button>
+        <button type="button" class="mini" data-wiedervorlage-ok title="Wiedervorlage sofort speichern">OK</button>
+    </div>
+</div>

@@ -37,3 +37,6 @@ jobs:
 
       - name: Tests
         run: python -m unittest discover -s tests -v
+
+      - name: Countdown, Abbrechen und sofortiges Speichern
+        run: node --test tests/wiedervorlage.test.cjs

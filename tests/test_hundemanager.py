@@ -1313,6 +1313,86 @@ class EmailOberflaecheTests(unittest.TestCase):
         self.assertNotIn('? GMX-Hilfe', self.oeffne('/').decode('utf-8'))
 
 
+class WiedervorlageTests(unittest.TestCase):
+    setUp = HaftpflichtOberflaecheTests.setUp
+    tearDown = HaftpflichtOberflaecheTests.tearDown
+    oeffne = HaftpflichtOberflaecheTests.oeffne
+
+    def datum(self):
+        with closing(sqlite3.connect(self.db)) as v:
+            return v.execute('SELECT wiedervorlage_am FROM hund WHERE id = 1').fetchone()[0]
+
+    def test_speichern_einstellungen_und_faellige_anzeige(self):
+        self.assertIsNone(self.datum())  # Migration aus altem Schema, keine erfundene Erinnerung
+        seite = self.oeffne('/').decode('utf-8')
+        self.assertIn('data-wartezeit="30"', seite)
+        ergebnis = json.loads(self.oeffne('/hund/1/wiedervorlage', b''))
+        termin = date.today() + timedelta(days=14)
+        self.assertEqual(self.datum(), termin.isoformat())
+        self.assertEqual(ergebnis['datum'], termin.strftime('%d.%m.%Y'))
+        self.assertIn('Wiedervorlage am', self.oeffne('/').decode('utf-8'))
+        self.oeffne('/einstellungen', urllib.parse.urlencode(
+            {'wiedervorlage_tage': '7', 'wiedervorlage_wartezeit': '45'}).encode())
+        self.oeffne('/hund/1/wiedervorlage', b'')
+        self.assertEqual(self.datum(), (date.today() + timedelta(days=7)).isoformat())
+        self.assertIn('data-wartezeit="45"', self.oeffne('/').decode('utf-8'))
+        with closing(sqlite3.connect(self.db)) as v:
+            v.execute('UPDATE hund SET wiedervorlage_am = ? WHERE id = 1', (date.today().isoformat(),))
+            v.commit()
+        self.assertIn('Wiedervorlage fällig seit', self.oeffne('/').decode('utf-8'))
+        self.oeffne('/einstellungen', b'standard=1')
+        self.assertIn('data-wartezeit="30"', self.oeffne('/').decode('utf-8'))
+
+    def test_ungueltige_einstellungen_werden_abgelehnt(self):
+        for wert in ('0', '-1', '1.5', 'abc', '999999'):
+            seite = self.oeffne('/einstellungen', urllib.parse.urlencode(
+                {'wiedervorlage_tage': wert, 'wiedervorlage_wartezeit': wert}).encode()).decode('utf-8')
+            self.assertIn('bitte eine ganze Zahl', seite)
+        self.oeffne('/hund/1/wiedervorlage', b'')
+        self.assertEqual(self.datum(), (date.today() + timedelta(days=14)).isoformat())
+
+    def test_nur_vollstaendige_angaben_entfernen_wiedervorlage(self):
+        self.oeffne('/hund/1/wiedervorlage', b'')
+        zukunft = (date.today() + timedelta(days=365)).isoformat()
+        daten = dict(name='Bello', geburtstag='2020-01-01', haftpflicht_gueltig='ja',
+                     gueltig_shp_dap_dhp=zukunft, gueltig_l=zukunft,
+                     gueltig_bbpi=zukunft, gueltig_t=zukunft)
+        self.oeffne('/hund/1/bearbeiten', urllib.parse.urlencode(daten).encode())
+        self.assertIsNotNone(self.datum())  # Häkchen ersetzt keinen Versicherungsnachweis
+        koerper, typ = multipart('datei', 'Test.pdf', test_pdf(bestaetigung_zeilen(date.today())))
+        seite = self.oeffne('/hund/1/haftpflicht/hochladen', koerper, typ).decode('utf-8')
+        sha = re.search(r'name="sha256" value="([0-9a-f]{64})"', seite).group(1)
+        self.oeffne('/hund/1/haftpflicht/speichern', urllib.parse.urlencode(
+            dict(sha256=sha, endung='pdf', original_name='Test.pdf', gueltig_bis=zukunft)).encode())
+        self.assertIsNone(self.datum())
+        self.assertIsNone(json.loads(self.oeffne('/hund/1/wiedervorlage', b''))['datum'])
+
+    def test_faellige_wiedervorlage_bleibt_im_handlungsbedarf(self):
+        zukunft = (date.today() + timedelta(days=365)).isoformat()
+        with closing(sqlite3.connect(self.db)) as v:
+            v.execute('UPDATE hund SET geburtstag = NULL, gueltig_shp_dap_dhp = ?, gueltig_l = ?, '
+                      'gueltig_bbpi = ?, gueltig_t = ?, wiedervorlage_am = ? WHERE id = 1',
+                      (zukunft, zukunft, zukunft, zukunft, date.today().isoformat()))
+            v.execute("INSERT INTO nachweis (hund_id, art, datei_sha256, datei_endung, original_name, "
+                      "hochgeladen_am, gueltig_bis) VALUES (1, 'haftpflicht', ?, 'pdf', 'Test.pdf', ?, ?)",
+                      ('a' * 64, date.today().isoformat(), zukunft))
+            v.commit()
+        seite = self.oeffne('/?ansicht=handlungsbedarf').decode('utf-8')
+        self.assertIn('Wiedervorlage fällig seit', seite)
+        self.assertIn('data-wiedervorlage="1"', seite)
+
+    def test_anfragen_sind_mit_countdown_verbunden(self):
+        self.oeffne('/person/1/bearbeiten', urllib.parse.urlencode(
+            dict(vorname='Jürgen', nachname='Müller', mobil='0171 1234567', email='test@example.org')).encode())
+        for pfad in ('/', '/hund/1/nachweise?art=impfpass'):
+            seite = self.oeffne(pfad).decode('utf-8')
+            self.assertIn('data-wiedervorlage-link="1"', seite)
+            self.assertIn('data-wiedervorlage="1"', seite)
+            self.assertIn('data-wiedervorlage-abbrechen', seite)
+            self.assertIn('data-wiedervorlage-ok', seite)
+        self.assertIsNone(self.datum())  # Öffnen allein speichert keine Wiedervorlage
+
+
 class FotoeinwilligungTests(unittest.TestCase):
     """Fotoeinwilligung je Halter: Anfrage per WhatsApp mit Formular-Link, Nachweis, Widerruf."""
 

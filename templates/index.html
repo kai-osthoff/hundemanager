@@ -167,11 +167,11 @@
                 {% if h.whatsapp_nachfrage or h.email_nachfrage %}
                 <span>{{ anzahl }} {{ 'Angabe fehlt' if anzahl == 1 else 'Angaben fehlen' }} – anfragen</span>
                 {% if h.whatsapp_nachfrage %}
-                <a href="{{ h.whatsapp_nachfrage }}" target="whatsapp" rel="noopener" class="mini mini-icon mini-wa"
+                <a data-wiedervorlage-link="{{ hund.id }}" href="{{ h.whatsapp_nachfrage }}" target="whatsapp" rel="noopener" class="mini mini-icon mini-wa"
                    aria-label="Fehlende Angaben per WhatsApp anfragen" title="Fehlende Angaben per WhatsApp anfragen">{{ icon_wa }}</a>
                 {% endif %}
                 {% if h.email_nachfrage %}
-                <a href="{{ h.email_nachfrage }}" class="mini mini-icon mini-mail"
+                <a data-wiedervorlage-link="{{ hund.id }}" href="{{ h.email_nachfrage }}" class="mini mini-icon mini-mail"
                    aria-label="Fehlende Angaben per E-Mail anfragen" title="Fehlende Angaben per E-Mail anfragen">{{ icon_mail }}</a>
                 {% endif %}
                 {% else %}
@@ -179,6 +179,10 @@
                     <a href="{{ url_for('person_bearbeiten', person_id=person.id) }}" title="Für eine WhatsApp-Nachfrage fehlt die Handynummer.">Nummer eintragen</a></span>
                 {% endif %}
             </div>
+            {% endif %}
+
+            {% if h.nachfragen %}
+            {% include '_wiedervorlage.html' %}
             {% endif %}
 
             {% if hund.bemerkung %}<div class="hund-bemerkung">{{ hund.bemerkung }}</div>{% endif %}

@@ -40,14 +40,14 @@
             {% endfor %}
         </dl>
         {% if ansicht.impf_nachfrage %}
-            <a href="{{ ansicht.impf_nachfrage }}" target="whatsapp" rel="noopener" class="wa-zeile" style="margin-bottom: 8px;">
+            <a data-wiedervorlage-link="{{ hund.id }}" href="{{ ansicht.impf_nachfrage }}" target="whatsapp" rel="noopener" class="wa-zeile" style="margin-bottom: 8px;">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1.4-4.2A8 8 0 1 1 8.3 20.7z"/><path d="M9 10h6M9 13.5h4"/></svg>
                 <span>Foto vom Impfpass per WhatsApp bei {{ hund.besitzer.vorname }} anfragen</span>
             </a>
         {% endif %}
         {% if ansicht.impf_mail %}
             <div class="mail-reihe" style="margin-bottom: 8px;">
-                <a href="{{ ansicht.impf_mail }}" class="wa-zeile mail-zeile">
+                <a data-wiedervorlage-link="{{ hund.id }}" href="{{ ansicht.impf_mail }}" class="wa-zeile mail-zeile">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
                     <span>Foto vom Impfpass per E-Mail bei {{ hund.besitzer.vorname }} anfragen</span>
                 </a>
@@ -60,6 +60,10 @@
                 <a href="{{ url_for('person_bearbeiten', person_id=hund.besitzer.id) }}">Nummer eintragen</a>
             </div>
         {% endif %}
+    {% endif %}
+
+    {% if ansicht.nachfragen %}
+    {% with h = ansicht %}{% include '_wiedervorlage.html' %}{% endwith %}
     {% endif %}
 
     <h3 style="margin-top: 22px;">Neuen {{ arten[gewaehlte_art].name }}-Nachweis hochladen</h3>

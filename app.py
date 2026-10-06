@@ -1,7 +1,7 @@
 # app.py - Hauptanwendung
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from dateutil.relativedelta import relativedelta
 import io
 import json
@@ -16,7 +16,7 @@ import urllib.parse
 import traceback
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from sqlalchemy import func, inspect, text #NEU
+from sqlalchemy import event, func, inspect, text #NEU
 import backup
 import bilder
 import mailto
@@ -127,6 +127,7 @@ class Hund(db.Model):
     gueltig_bbpi = db.Column(db.Date, nullable=True)
     gueltig_t = db.Column(db.Date, nullable=True)
     haftpflicht_gueltig = db.Column(db.Boolean, default=False)  # alte Ja/Nein-Angabe ohne Nachweis
+    wiedervorlage_am = db.Column(db.Date, nullable=True)
     bemerkung = db.Column(db.Text, nullable=True)
     person_id = db.Column(db.Integer, db.ForeignKey('person.id'), nullable=False)
     nachweise = db.relationship('Nachweis', backref='hund', lazy=True,
@@ -268,6 +269,20 @@ class Einstellung(db.Model):
 
 # Bekannte Einstellungen mit Standardwert - neue Einstellung = Eintrag hier
 EINSTELLUNGEN = {
+    'wiedervorlage_tage': {
+        'name': 'Wiedervorlage nach Tagen',
+        'hilfe': 'So viele Tage nach einer Erinnerung erneut nach den fehlenden Angaben fragen.',
+        'standard': '14',
+        'art': 'zahl',
+        'maximum': 3650,
+    },
+    'wiedervorlage_wartezeit': {
+        'name': 'Wartezeit vor dem Speichern (Sekunden)',
+        'hilfe': 'Nach dem Öffnen von WhatsApp oder E-Mail bleibt so lange Zeit zum Abbrechen. Mit OK sofort speichern.',
+        'standard': '30',
+        'art': 'zahl',
+        'maximum': 3600,
+    },
     'fotoeinwilligung_link': {
         'name': 'Link zum Formular „Einwilligung zu Fotoaufnahmen“',
         'hilfe': 'Wird in der WhatsApp-Anfrage mitgeschickt. Ändert der Verein das Formular, '
@@ -433,11 +448,33 @@ def hund_ansicht(hund):
         'gesamt': gesamt,
         'gesamt_text': GESAMT_TEXT[gesamt],
         'nachfragen': nachfragen,
+        'wiedervorlage_faellig': bool(hund.wiedervorlage_am and hund.wiedervorlage_am <= heute),
         'whatsapp_nachfrage': whatsapp_nachfrage,
         'email_nachfrage': email_nachfrage,
         'impf_nachfrage': impf_nachfrage(hund, impfungen),
         'impf_mail': impf_nachfrage(hund, impfungen, 'email'),
     }
+
+
+@event.listens_for(db.session.session_factory, 'before_commit')
+def erledigte_wiedervorlagen_entfernen(session):
+    # Erst Angaben/Nachweise speichern, damit auch neue Dokumente berücksichtigt werden.
+    session.flush()
+    for hund in session.query(Hund).filter(Hund.wiedervorlage_am.isnot(None)).all():
+        if not hund_ansicht(hund)['nachfragen']:
+            hund.wiedervorlage_am = None
+
+
+@app.route('/hund/<int:hund_id>/wiedervorlage', methods=['POST'])
+def wiedervorlage_speichern(hund_id):
+    hund = db.get_or_404(Hund, hund_id)
+    if hund_ansicht(hund)['nachfragen']:
+        hund.wiedervorlage_am = date.today() + timedelta(days=int(einstellung('wiedervorlage_tage')))
+    else:
+        hund.wiedervorlage_am = None
+    db.session.commit()
+    return jsonify(datum=format_datum(hund.wiedervorlage_am) if hund.wiedervorlage_am else None,
+                   faellig=bool(hund.wiedervorlage_am and hund.wiedervorlage_am <= date.today()))
 
 
 def impf_punkte(impfungen):
@@ -513,7 +550,7 @@ def index():
     for person in (alle_personen if ansicht == 'alle' else aktive):
         hunde = [hund_ansicht(h) for h in sorted(person.hunde, key=lambda h: h.name.lower())]
         if ansicht == 'handlungsbedarf':
-            hunde = [h for h in hunde if h['gesamt'] != 'ok']
+            hunde = [h for h in hunde if h['gesamt'] != 'ok' or h['wiedervorlage_faellig']]
             if not hunde:
                 continue
         if filter_:
@@ -530,7 +567,7 @@ def index():
         'bald': impf_stati.count('bald-ablaufend'),
         'abgelaufen': impf_stati.count('abgelaufen'),
         'ohne_haftpflicht': sum(1 for h in aktive_hunde if h['haftpflicht'] not in ('gueltig', 'bald-ablaufend')),
-        'handlungsbedarf': sum(1 for h in aktive_hunde if h['gesamt'] != 'ok'),
+        'handlungsbedarf': sum(1 for h in aktive_hunde if h['gesamt'] != 'ok' or h['wiedervorlage_faellig']),
         'ohne_fotoeinwilligung': sum(1 for p in aktive if p.foto_status in ('fehlt', 'ohne-nachweis')),
     }
 
@@ -1092,6 +1129,10 @@ def _einstellung_pruefen(schluessel, wert):
                f'oder +49 171 1234567 eingeben.'
     if EINSTELLUNGEN[schluessel]['art'] == 'auswahl' and wert and wert not in EINSTELLUNGEN[schluessel]['optionen']:
         return f'{EINSTELLUNGEN[schluessel]["name"]}: bitte einen Eintrag aus der Liste wählen.'
+    info = EINSTELLUNGEN[schluessel]
+    if info['art'] == 'zahl' and wert:
+        if not re.fullmatch(r'[0-9]+', wert) or not 1 <= int(wert) <= info['maximum']:
+            return f'{info["name"]}: bitte eine ganze Zahl zwischen 1 und {info["maximum"]} eingeben.'
     return None
 
 
