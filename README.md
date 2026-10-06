@@ -97,4 +97,4 @@ Fotos vom **Impfpass** lädst du auf der Nachweis-Seite des Hundes unter „Impf
 
 ---
 
-<sub>Für Entwickler: siehe `CLAUDE.md` und `release.sh`.</sub>
+<sub>Für Entwickler: siehe `AGENTS.md` und `release.sh`.</sub>
