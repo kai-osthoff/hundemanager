@@ -40,6 +40,7 @@ class Person(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     vorname = db.Column(db.String(100), nullable=False)
     nachname = db.Column(db.String(100), nullable=False)
+    rufname = db.Column(db.String(100), nullable=True)
     aktiv = db.Column(db.Boolean, default=True)  # 👈v4
     fotofreigabe = db.Column(db.Boolean, default=False)  # 👈 NEU v5
     mobil = db.Column(db.String(30), nullable=True)   # für WhatsApp, so wie eingegeben
@@ -53,6 +54,10 @@ class Person(db.Model):
     @property
     def vollstaendiger_name(self):
         return f"{self.vorname} {self.nachname}"
+
+    @property
+    def ansprache(self):
+        return self.rufname or self.vorname
 
     @property
     def aktuelle_fotoeinwilligung(self):
@@ -73,7 +78,7 @@ class Person(db.Model):
         if self.foto_status not in ('fehlt', 'ohne-nachweis'):
             return None
         return whatsapp.fotoeinwilligung_nachricht(
-            self.vorname, [h.name for h in sorted(self.hunde, key=lambda h: h.name.lower())],
+            self.ansprache, [h.name for h in sorted(self.hunde, key=lambda h: h.name.lower())],
             einstellung('fotoeinwilligung_link'), kanal)
 
     @property
@@ -405,10 +410,10 @@ def hund_ansicht(hund):
     whatsapp_nachfrage = email_nachfrage = None
     if nachfragen:
         whatsapp_nachfrage = whatsapp.link(hund.besitzer.mobil, whatsapp.fehlende_daten_nachricht(
-            hund.besitzer.vorname, hund.name, nachfragen))
+            hund.besitzer.ansprache, hund.name, nachfragen))
         email_nachfrage = mailto.link(hund.besitzer.email, f'{hund.name}: fehlende Angaben',
                                       whatsapp.fehlende_daten_nachricht(
-                                          hund.besitzer.vorname, hund.name, nachfragen, 'email'))
+                                          hund.besitzer.ansprache, hund.name, nachfragen, 'email'))
 
     stati = [i['status'] for i in impfungen] + [haftpflicht]
     if 'abgelaufen' in stati:
@@ -454,7 +459,7 @@ def impf_nachfrage(hund, impfungen, kanal='whatsapp'):
     punkte = impf_punkte(impfungen)
     if not punkte:
         return None
-    text = whatsapp.impfpass_nachricht(hund.besitzer.vorname, hund.name, punkte, kanal)
+    text = whatsapp.impfpass_nachricht(hund.besitzer.ansprache, hund.name, punkte, kanal)
     if kanal == 'email':
         return mailto.link(hund.besitzer.email, f'{hund.name}: Impfpass', text)
     return whatsapp.link(hund.besitzer.mobil, text)
@@ -549,6 +554,7 @@ def _person_angaben(person):
         return 'Die E-Mail-Adresse stimmt so nicht – bitte prüfen.'
     person.vorname = vorname
     person.nachname = nachname
+    person.rufname = request.form.get('rufname', '').strip()[:100] or None
     # Mit unterschriebener Einwilligung bleibt die Freigabe bestehen (Häkchen ist dann gesperrt)
     person.fotofreigabe = request.form.get('fotofreigabe') == '1' or bool(
         person.id and person.aktuelle_fotoeinwilligung)

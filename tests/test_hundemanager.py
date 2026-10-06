@@ -1124,6 +1124,44 @@ class WhatsAppOberflaecheTests(unittest.TestCase):
         self.assertEqual(zeilen[0][11:13], ('Handynummer', 'E-Mail'))
         self.assertIn(('0171 1234567', 'juergen@example.org'), [z[11:13] for z in zeilen[1:]])
 
+    def test_rufname_speichern_und_in_nachrichten_verwenden(self):
+        self.person_speichern(1, rufname='  Jürgi  ', mobil='0171 1234567', email='juergen@example.org')
+        with closing(sqlite3.connect(self.db)) as v:
+            self.assertEqual(v.execute('SELECT vorname, rufname FROM person WHERE id = 1').fetchone(),
+                             ('Jürgen', 'Jürgi'))
+        self.assertIn('value="Jürgi"', self.oeffne('/person/1/bearbeiten').decode('utf-8'))
+
+        def nachrichtentexte():
+            seiten = [self.oeffne('/').decode('utf-8'),
+                      self.oeffne('/hund/2/nachweise?art=impfpass').decode('utf-8')]
+            texte = []
+            for seite in seiten:
+                for link in re.findall(r'href="([^"]+)"', seite):
+                    link = html_unescape(link)
+                    if link.startswith(('https://web.whatsapp.com/', 'mailto:')):
+                        abfrage = urllib.parse.parse_qs(urllib.parse.urlparse(link).query)
+                        texte.extend(abfrage.get('text', []) + abfrage.get('body', []))
+            return texte
+
+        texte = nachrichtentexte()
+        for kanal in ('WhatsApp', 'E-Mail'):
+            for betreff in ('fehlen mir noch', 'Impfpass etwas', 'Einwilligung'):
+                self.assertTrue(any(betreff in t and kanal in t for t in texte), (kanal, betreff))
+        self.assertTrue(all(t.startswith('Hallo Jürgi,') for t in texte))
+
+        self.person_speichern(1, rufname='   ', mobil='0171 1234567', email='juergen@example.org')
+        with closing(sqlite3.connect(self.db)) as v:
+            self.assertIsNone(v.execute('SELECT rufname FROM person WHERE id = 1').fetchone()[0])
+        self.assertTrue(all(t.startswith('Hallo Jürgen,') for t in nachrichtentexte()))
+
+        neu = urllib.parse.urlencode({'vorname': 'Franziska', 'nachname': 'Neu', 'rufname': 'Franzi'}).encode()
+        self.oeffne('/person/neu', neu)
+        with closing(sqlite3.connect(self.db)) as v:
+            self.assertEqual(v.execute("SELECT rufname FROM person WHERE vorname = 'Franziska'").fetchone(),
+                             ('Franzi',))
+        seite = self.person_speichern(1, rufname='Jürgi', email='ungueltig')
+        self.assertIn('value="Jürgi"', seite)
+
     def test_whatsapp_knoepfe_in_der_uebersicht(self):
         self.person_speichern(1, mobil='0171 1234567')
         seite = self.oeffne('/').decode('utf-8')

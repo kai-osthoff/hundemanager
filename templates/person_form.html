@@ -19,6 +19,13 @@
         </div>
 
         <div class="form-group">
+            <label for="rufname">Rufname</label>
+            <input type="text" id="rufname" name="rufname" value="{{ w.rufname or '' }}" maxlength="100"
+                   placeholder="z. B. Franzi">
+            <small>Optional: Wird für die Ansprache in Nachrichten verwendet. Ohne Rufname verwenden wir den Vornamen.</small>
+        </div>
+
+        <div class="form-group">
             <label for="mobil">Handynummer</label>
             <input type="tel" id="mobil" name="mobil" value="{{ w.mobil or '' }}" maxlength="30"
                    placeholder="z. B. 0171 1234567" autocomplete="off">
