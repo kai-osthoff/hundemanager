@@ -1,0 +1,11 @@
+{# Halter ohne Handynummer und E-Mail: Ansprechpartner im Vorstand per WhatsApp fragen - ist keiner
+   eingetragen, führt der Knopf zu den Einstellungen. Erwartet: person, klasse #}
+{% set anfrage = person.kontaktdaten_anfrage %}
+{% if anfrage %}
+<a href="{{ anfrage }}" target="whatsapp" rel="noopener" class="{{ klasse }}"
+   title="{{ einstellungen_werte.kontaktdaten_name }} per WhatsApp um Handynummer und E-Mail von {{ person.vollstaendiger_name }} bitten">Kontaktdaten bei {{ einstellungen_werte.kontaktdaten_name.split()[0] }} anfragen</a>
+{% else %}
+<a href="{{ url_for('einstellungen') }}" class="{{ klasse }}"
+   title="Von {{ person.vollstaendiger_name }} fehlen Handynummer und E-Mail. Erst in den Einstellungen eintragen, wer im Vorstand die Kontaktdaten hat."
+   onclick="var d = document.getElementById('einstellungen-dialog'); if (d && d.showModal) { d.showModal(); document.getElementById('einstellung-kontaktdaten_name').focus(); return false; }">Kontaktdaten anfragen: erst Ansprechpartner eintragen</a>
+{% endif %}

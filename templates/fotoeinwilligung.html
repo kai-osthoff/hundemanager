@@ -37,6 +37,7 @@
         <a href="{{ person.fotoeinwilligung_anfrage }}" target="whatsapp" rel="noopener" class="knopf knopf-whatsapp">Per WhatsApp anfragen (mit Link zum Formular)</a>
         {% elif not person.fotoeinwilligung_mail %}
         <a href="{{ url_for('person_bearbeiten', person_id=person.id) }}" class="knopf">Für eine WhatsApp-Anfrage Handynummer eintragen</a>
+        {% with klasse = 'knopf knopf-whatsapp' %}{% include '_kontaktdaten_knopf.html' %}{% endwith %}
         {% endif %}
         <a href="{{ formular_link }}" target="_blank" rel="noopener" class="knopf">Leeres Formular öffnen ↗</a>
     </div>

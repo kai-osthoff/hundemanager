@@ -74,19 +74,32 @@ def impfpass_nachricht(vorname, hundename, punkte, kanal='whatsapp'):
     return '\n'.join(zeilen)
 
 
+def _aufzaehlung(namen):
+    """['Bello', 'Luna', 'Rex'] -> 'Bello, Luna und Rex'."""
+    return ', '.join(namen[:-1]) + ' und ' + namen[-1] if len(namen) > 1 else ''.join(namen)
+
+
 def fotoeinwilligung_nachricht(vorname, hundenamen, formular_link, kanal='whatsapp'):
     """Bitte um die unterschriebene Einwilligung zu Fotoaufnahmen - mit Link zum Formular."""
-    if len(hundenamen) > 1:
-        mit = ' mit ' + ', '.join(hundenamen[:-1]) + ' und ' + hundenamen[-1]
-    elif hundenamen:
-        mit = ' mit ' + hundenamen[0]
-    else:
-        mit = ''
+    mit = ' mit ' + _aufzaehlung(hundenamen) if hundenamen else ''
     zeilen = [f'Hallo {vorname},', '',
               f'damit wir im Verein Fotos und Videos von dir{mit} verwenden dürfen '
               '(z. B. für Website, Berichte oder Flyer), brauche ich noch deine unterschriebene '
               'Einwilligung zu Fotoaufnahmen.', '',
               'Hier ist das Formular zum Ausdrucken:', formular_link, '',
               f'Bitte ausfüllen, unterschreiben und mir ein Foto oder einen Scan {ANTWORT_WEG[kanal]} schicken.',
+              '', 'Danke und viele Grüße', ABSENDER]
+    return '\n'.join(zeilen)
+
+
+def kontaktdaten_nachricht(ansprechpartner, halter, hundenamen):
+    """Bitte an den Ansprechpartner im Vorstand um Handynummer und E-Mail eines Halters,
+    von dem keins von beidem bekannt ist."""
+    vorname = ansprechpartner.split()[0]
+    mit = f' (mit {_aufzaehlung(hundenamen)})' if hundenamen else ''
+    zeilen = [f'Hallo {vorname},', '',
+              f'von {halter}{mit} habe ich im Hundemanager weder eine Handynummer noch eine E-Mail-Adresse.', '',
+              'Kannst du mir bitte die Kontaktdaten schicken? Ich brauche sie, um die Angaben zu den Hunden '
+              '(Impfungen, Haftpflicht usw.) zu pflegen und bei Bedarf nachzufragen.',
               '', 'Danke und viele Grüße', ABSENDER]
     return '\n'.join(zeilen)

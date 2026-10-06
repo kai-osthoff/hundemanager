@@ -1054,6 +1054,13 @@ class WhatsAppTests(unittest.TestCase):
         self.assertIn('für Bello', text)
         self.assertIn('• Impfung L: Datum fehlt noch\n• Geburtstag', text)
 
+    def test_kontaktdaten_nachricht_an_ansprechpartner(self):
+        text = self.wa.kontaktdaten_nachricht('Erika Beispiel', 'Jürgen Müller', ['Bello', 'Luna'])
+        self.assertTrue(text.startswith('Hallo Erika,'))
+        self.assertIn('von Jürgen Müller (mit Bello und Luna) habe ich im Hundemanager weder eine '
+                      'Handynummer noch eine E-Mail-Adresse', text)
+        self.assertIn('von Anna Neu habe ich', self.wa.kontaktdaten_nachricht('Erika', 'Anna Neu', []))
+
 
 class WhatsAppOberflaecheTests(unittest.TestCase):
     """Handynummer und E-Mail beim Halter, WhatsApp-Knöpfe in der Übersicht."""
@@ -1119,6 +1126,36 @@ class WhatsAppOberflaecheTests(unittest.TestCase):
         self.assertNotIn('Geburtstag', texte['Bello'])
         self.assertIn('• Impfung L: Datum fehlt noch', texte['Bello'])
         self.assertIn('target="whatsapp"', seite)
+
+    def test_kontaktdaten_beim_ansprechpartner_anfragen(self):
+        def einstellen(**werte):
+            return self.oeffne('/einstellungen', urllib.parse.urlencode(werte).encode()).decode('utf-8')
+
+        # Ohne Handynummer und E-Mail und ohne Ansprechpartner: Knopf führt zu den Einstellungen
+        seite = self.oeffne('/').decode('utf-8')
+        self.assertIn('erst Ansprechpartner eintragen', seite)
+        self.assertIn('id="einstellung-kontaktdaten_name"', seite)
+        self.assertNotIn('web.whatsapp.com', seite)
+
+        self.assertIn('bitte Name und Handynummer angeben', einstellen(kontaktdaten_name='Erika Beispiel'))
+        self.assertIn('Handynummer: stimmt so nicht', einstellen(kontaktdaten_name='Erika Beispiel',
+                                                                  kontaktdaten_mobil='12a'))
+        self.assertIn('Einstellungen gespeichert', einstellen(kontaktdaten_name='Erika Beispiel',
+                                                              kontaktdaten_mobil='0151 2345678'))
+
+        seite = self.oeffne('/').decode('utf-8')
+        self.assertNotIn('erst Ansprechpartner eintragen', seite)
+        self.assertIn('Kontaktdaten bei Erika anfragen', seite)
+        texte = [urllib.parse.parse_qs(urllib.parse.urlparse(html_unescape(l)).query)['text'][0]
+                 for l in re.findall(r'href="(https://web\.whatsapp\.com/send\?phone=491512345678[^"]+)"', seite)]
+        self.assertIn('Hallo Erika,', texte[0])
+        self.assertTrue(any('von Jürgen Müller (mit Bello und Luna) habe ich' in t for t in texte), texte)
+        self.assertIn('Kontaktdaten bei Erika anfragen', self.oeffne('/person/1/fotoeinwilligung').decode('utf-8'))
+
+        # Mit E-Mail ist der Halter erreichbar - keine Anfrage mehr für ihn
+        self.person_speichern(1, email='juergen@example.org')
+        seite = self.oeffne('/').decode('utf-8')
+        self.assertNotIn('von Jürgen Müller', html_unescape(urllib.parse.unquote(seite)))
 
 
 class MailtoTests(unittest.TestCase):

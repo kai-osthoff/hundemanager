@@ -152,6 +152,9 @@ Programm passiert erst nach einer geprüften Sicherung.**
   `49171…`; deutsche Nummern ohne Vorwahl gelten als +49) und `email`.
 - Hundekarten mit fehlenden/abgelaufenen/bald fälligen Angaben bekommen eine vorausgefüllte
   Nachfrage (`fehlende_angaben()` in app.py). Datenschutz: echte Nummern nie in Tests.
+- Halter ohne Handynummer **und** E-Mail (`Person.kontaktdaten_fehlen`): Knopf „Kontaktdaten bei … anfragen“
+  schickt per WhatsApp eine Bitte an den Ansprechpartner im Vorstand (`kontaktdaten_name`/`kontaktdaten_mobil`
+  in `EINSTELLUNGEN`, nur beide zusammen). Ist keiner eingetragen, öffnet der Knopf den Einstellungsdialog.
 
 ## E-Mail an Halter
 

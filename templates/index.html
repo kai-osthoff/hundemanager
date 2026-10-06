@@ -97,6 +97,9 @@
                 </div>
             </details>
             {% endif %}
+            {% if person.kontaktdaten_fehlen %}
+            {% with klasse = 'mini mini-wa' %}{% include '_kontaktdaten_knopf.html' %}{% endwith %}
+            {% endif %}
             <a href="{{ url_for('hund_neu', person_id=person.id) }}" class="mini">+ Hund</a>
         </div>
     </div>

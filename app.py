@@ -88,6 +88,21 @@ class Person(db.Model):
         return mailto.link(self.email, 'Einwilligung zu Fotoaufnahmen', text) if text else None
 
     @property
+    def kontaktdaten_fehlen(self):
+        """Weder brauchbare Handynummer noch E-Mail - der Halter ist aus der App nicht erreichbar."""
+        return not self.whatsapp_link and not self.email_link
+
+    @property
+    def kontaktdaten_anfrage(self):
+        """WhatsApp an den Ansprechpartner für Kontaktdaten (Einstellungen) - None, wenn er nicht
+        eingetragen ist oder der Halter erreichbar ist."""
+        if not self.kontaktdaten_fehlen or not einstellung('kontaktdaten_name'):
+            return None
+        return whatsapp.link(einstellung('kontaktdaten_mobil'), whatsapp.kontaktdaten_nachricht(
+            einstellung('kontaktdaten_name'), self.vollstaendiger_name,
+            [h.name for h in sorted(self.hunde, key=lambda h: h.name.lower())]))
+
+    @property
     def whatsapp_link(self):
         """Leerer Chat in WhatsApp Web - None ohne gültige Handynummer."""
         return whatsapp.link(self.mobil)
@@ -253,6 +268,20 @@ EINSTELLUNGEN = {
                  'hier den neuen Link eintragen.',
         'standard': 'https://www.hsv-grossbottwar.de/wp-content/uploads/2026/02/Einwilligung_Fotoaufnahmen_wolf.pdf',
         'art': 'url',
+    },
+    'kontaktdaten_name': {
+        'name': 'Ansprechpartner für Kontaktdaten: Vor- und Nachname',
+        'hilfe': 'Wer im Vorstand die Handynummern und E-Mail-Adressen der Mitglieder hat. '
+                 'Fehlt bei einem Halter beides, gibt es einen Knopf „Kontaktdaten anfragen“.',
+        'standard': '',
+        'art': 'text',
+    },
+    'kontaktdaten_mobil': {
+        'name': 'Ansprechpartner für Kontaktdaten: Handynummer',
+        'hilfe': 'An diese Nummer geht die Anfrage per WhatsApp.',
+        'standard': '',
+        'art': 'tel',
+        'platzhalter': 'z. B. 0171 1234567',
     },
     'theme': {
         'name': 'Farbschema',
@@ -1047,6 +1076,9 @@ def _einstellung_pruefen(schluessel, wert):
             not re.fullmatch(r'https?://[^\s/]+\.[^\s/]+(/\S*)?', wert):
         return f'{EINSTELLUNGEN[schluessel]["name"]}: bitte eine vollständige Adresse ' \
                f'eingeben, die mit https:// beginnt.'
+    if EINSTELLUNGEN[schluessel]['art'] == 'tel' and wert and not whatsapp.nummer(wert):
+        return f'{EINSTELLUNGEN[schluessel]["name"]}: stimmt so nicht – bitte z. B. als 0171 1234567 ' \
+               f'oder +49 171 1234567 eingeben.'
     if EINSTELLUNGEN[schluessel]['art'] == 'auswahl' and wert and wert not in EINSTELLUNGEN[schluessel]['optionen']:
         return f'{EINSTELLUNGEN[schluessel]["name"]}: bitte einen Eintrag aus der Liste wählen.'
     return None
@@ -1059,6 +1091,8 @@ def einstellungen():
         if request.form.get('standard'):
             werte = {s: '' for s in EINSTELLUNGEN}  # leer = Standard
         fehler = [f for f in (_einstellung_pruefen(s, w) for s, w in werte.items()) if f]
+        if bool(werte['kontaktdaten_name']) != bool(werte['kontaktdaten_mobil']):
+            fehler.append('Ansprechpartner für Kontaktdaten: bitte Name und Handynummer angeben (oder beides leer lassen).')
         if fehler:
             for f in fehler:
                 flash(f, 'error')

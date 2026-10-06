@@ -13,9 +13,9 @@
         <small>{{ info.hilfe }}</small>
         {% else %}
         <input type="{{ info.art }}" id="einstellung-{{ schluessel }}" name="{{ schluessel }}"
-               value="{{ werte[schluessel] or '' }}" placeholder="{{ info.standard }}" autocomplete="off">
+               value="{{ werte[schluessel] or '' }}" placeholder="{{ info.platzhalter or info.standard }}" autocomplete="off">
         <small>{{ info.hilfe }}
-            {% if werte[schluessel] %}<a href="{{ werte[schluessel] }}" target="_blank" rel="noopener">Link prüfen ↗</a>{% endif %}</small>
+            {% if info.art == 'url' and werte[schluessel] %}<a href="{{ werte[schluessel] }}" target="_blank" rel="noopener">Link prüfen ↗</a>{% endif %}</small>
         {% endif %}
     </div>
     {% endfor %}
