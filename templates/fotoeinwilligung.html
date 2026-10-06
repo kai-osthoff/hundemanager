@@ -47,9 +47,16 @@
     <h3 style="margin-top: 22px;">Unterschriebene Einwilligung hochladen</h3>
     <p style="color: #55625A; font-size: 0.9rem; margin-bottom: 10px;">PDF/Scan oder Foto (JPG/PNG) des ausgefüllten und unterschriebenen Formulars.</p>
     <form action="{{ url_for('fotoeinwilligung_hochladen', person_id=person.id) }}" method="POST" enctype="multipart/form-data">
+        {# Hineinziehen füllt nur das Feld - Datum und Bemerkung können noch dazu #}
         <div class="form-group">
-            <label for="datei" class="required">Datei</label>
-            <input type="file" id="datei" name="datei" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required>
+            <span class="required" style="display: block; margin-bottom: 6px; font-weight: 500; color: #495057;">Datei</span>
+            <label class="ablage">
+                <input type="file" id="datei" name="datei" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required>
+                <strong>PDF oder Foto hierher ziehen</strong>
+                <span>oder <span class="ablage-auswahl">Datei auswählen</span></span>
+                <small>Loslassen klappt überall auf dieser Seite.</small>
+                <span class="ablage-dateien" hidden></span>
+            </label>
         </div>
         <div class="form-group">
             <label for="unterschrieben_am">Unterschrieben am</label>

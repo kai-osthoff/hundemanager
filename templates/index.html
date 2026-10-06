@@ -43,11 +43,18 @@
 {% set pfeil %}<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>{% endset %}
 {% set icon_wa %}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1.4-4.2A8 8 0 1 1 8.3 18.7z"/><path d="M9 10h6M9 13.5h4"/></svg>{% endset %}
 {% set icon_mail %}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>{% endset %}
+{% if gruppen %}
+<p class="ablage-tipp">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4M7 9l5-5 5 5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+    <span>Tipp: Impfpass, Haftpflicht oder Fotoeinwilligung (PDF oder Foto) einfach auf einen Hund oder Halter ziehen – danach fragt der Hundemanager, was es ist.</span>
+</p>
+{% endif %}
 {% set icon_mehr %}<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>{% endset %}
 <div class="halter-liste">
 {% for gruppe in gruppen %}
 {% set person = gruppe.person %}
-<section class="halter" aria-label="{{ person.vollstaendiger_name }}">
+<section class="halter" aria-label="{{ person.vollstaendiger_name }}"
+         data-ablage-person="{{ person.vollstaendiger_name }}" data-ablage-url="{{ url_for('fotoeinwilligung_hochladen', person_id=person.id) }}">
     <div class="halter-kopf">
         <div class="halter-zeile">
             <h3>{{ person.nachname }}, {{ person.vorname }}</h3>
@@ -109,7 +116,8 @@
         {% for h in gruppe.hunde %}
         {% set hund = h.hund %}
         {# Die ganze Karte führt zu den Nachweisen des Hundes; Kacheln, Zeilen und Menü liegen darüber #}
-        <article class="hund-karte status-{{ h.gesamt }} {{ 'ist-pausiert' if not person.aktiv }}" aria-label="{{ hund.name }}">
+        <article class="hund-karte status-{{ h.gesamt }} {{ 'ist-pausiert' if not person.aktiv }}" aria-label="{{ hund.name }}"
+                 data-ablage-hund="{{ hund.name }}" data-ablage-url="{{ url_for('nachweis_hochladen', hund_id=hund.id) }}">
             <div class="hund-kopf">
                 <div class="avatar" aria-hidden="true">{{ hund.name[:1]|upper }}</div>
                 <div class="hund-name">
@@ -197,6 +205,72 @@
 </div>
 {% endfor %}
 </div>
+
+{# Auf Hund oder Halter fallengelassene Dateien: fragen, was es ist, dann zum passenden Hochladen #}
+<dialog id="ablage-dialog" class="einstellungen-dialog ablage-dialog" aria-labelledby="ablage-titel">
+    <form method="POST" enctype="multipart/form-data">
+        <input type="file" name="datei" multiple hidden>
+        <h2 id="ablage-titel">Was ist das?</h2>
+        <ul class="ablage-dateien"></ul>
+        <div class="ablage-wahl"></div>
+        <div class="dialog-aktionen">
+            <button type="button" class="btn btn-secondary" onclick="this.closest('dialog').close();">Abbrechen</button>
+        </div>
+    </form>
+</dialog>
+<script>
+    (function () {
+        var dialog = document.getElementById('ablage-dialog'), form = dialog.querySelector('form');
+        var arten = {{ ablage_arten|tojson }};
+        function knopf(text, hinweis, url, art, gesperrt) {
+            var b = document.createElement('button');
+            b.type = 'submit';
+            b.formAction = url;
+            b.name = 'art';
+            b.value = art;
+            b.disabled = !!gesperrt;
+            b.textContent = text;
+            if (hinweis) {
+                var s = document.createElement('small');
+                s.textContent = hinweis;
+                b.appendChild(s);
+            }
+            return b;
+        }
+        document.addEventListener('dragover', function (e) {
+            var ziel = e.target.closest && e.target.closest('[data-ablage-hund], [data-ablage-person]');
+            document.querySelectorAll('.ablage-drueber').forEach(function (el) { if (el !== ziel) el.classList.remove('ablage-drueber'); });
+            if (ziel && Array.prototype.indexOf.call(e.dataTransfer.types, 'Files') >= 0) ziel.classList.add('ablage-drueber');
+        });
+        document.addEventListener('drop', function (e) {
+            document.querySelectorAll('.ablage-drueber').forEach(function (el) { el.classList.remove('ablage-drueber'); });
+            var dateien = e.dataTransfer && e.dataTransfer.files;
+            var karte = e.target.closest && e.target.closest('[data-ablage-hund]');
+            var halter = e.target.closest && e.target.closest('[data-ablage-person]');
+            if (!dateien || !dateien.length || !halter) return;
+            // Auf einen Hund gezogen: nur dieser Hund. Auf den Halter: alle seine Hunde.
+            var hunde = karte ? [karte] : halter.querySelectorAll('[data-ablage-hund]');
+            var wahl = dialog.querySelector('.ablage-wahl'), liste = dialog.querySelector('ul.ablage-dateien');
+            wahl.textContent = '';
+            liste.textContent = '';
+            Array.prototype.forEach.call(dateien, function (d) {
+                var li = document.createElement('li');
+                li.textContent = d.name;
+                liste.appendChild(li);
+            });
+            Array.prototype.forEach.call(hunde, function (hund) {
+                Object.keys(arten).forEach(function (art) {
+                    wahl.appendChild(knopf(arten[art] + ' von ' + hund.dataset.ablageHund, null, hund.dataset.ablageUrl, art));
+                });
+            });
+            wahl.appendChild(knopf('Fotoeinwilligung von ' + halter.dataset.ablagePerson,
+                dateien.length > 1 ? 'Bitte nur eine Datei hineinziehen' : null,
+                halter.dataset.ablageUrl, 'fotoeinwilligung', dateien.length > 1));
+            form.querySelector('input[type=file]').files = dateien;
+            dialog.showModal();
+        });
+    })();
+</script>
 
 {% if pausierte %}
 <details class="pausiert">

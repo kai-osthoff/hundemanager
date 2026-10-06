@@ -939,6 +939,44 @@
         .einst-fuss .btn-secondary:hover { background: #EEF3EC; }
         .einst-zuruecksetzen { min-height: 44px; display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; color: #55625A; font: inherit; font-size: 0.9rem; text-decoration: underline; cursor: pointer; }
         .einst-zuruecksetzen:hover { color: #15201A; }
+
+        /* Dateien hineinziehen: Ablagefläche statt nacktem Datei-Feld (Skript unten in dieser Datei) */
+        label.ablage {  /* label.: schlägt ".form-group label" aus dem Grundstil */
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            padding: 22px 16px;
+            border: 2px dashed #9DB3A6;
+            border-radius: 10px;
+            background: #F6F9F5;
+            color: #55625A;
+            text-align: center;
+            cursor: pointer;
+            transition: background 0.12s, border-color 0.12s;
+        }
+        .ablage strong { color: #15201A; font-size: 1rem; }
+        .ablage .ablage-auswahl { color: #173B2C; text-decoration: underline; }
+        .ablage .ablage-dateien { color: #15201A; font-weight: 600; }
+        .ablage:hover, .ablage:focus-within, .zieht-datei .ablage { border-color: #173B2C; background: #E8F0E6; }
+        .ablage.ablage-drueber { border-style: solid; background: #DCEADB; }
+        /* Datei-Feld unsichtbar, aber bedienbar - so zeigt der Browser seinen Hinweis bei "required" */
+        .ablage input[type=file] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+
+        /* Übersicht: Datei auf Hund oder Halter ziehen */
+        .ablage-tipp { display: flex; align-items: center; gap: 8px; color: #55625A; font-size: 0.875rem; margin: -4px 0 14px; }
+        .zieht-datei .ablage-tipp { color: #15201A; font-weight: 600; }
+        .zieht-datei .halter[data-ablage-person] { outline: 2px dashed #9DB3A6; outline-offset: 6px; border-radius: 12px; }
+        .zieht-datei .hund-karte[data-ablage-hund] { box-shadow: inset 0 0 0 2px #9DB3A6; }
+        .halter.ablage-drueber { outline: 2px solid #173B2C !important; background: rgba(23, 59, 44, 0.05); }
+        .hund-karte.ablage-drueber { box-shadow: inset 0 0 0 3px #173B2C !important; background: #E8F0E6; }
+        .ablage-dialog ul.ablage-dateien { margin: 0 0 16px 20px; color: #55625A; font-size: 0.9rem; }
+        .ablage-wahl { display: grid; gap: 8px; }
+        .ablage-wahl button { min-height: 48px; text-align: left; padding: 10px 14px; border: 1px solid #C9D4CC; border-radius: 8px; background: #FFFFFF; font: inherit; color: #15201A; cursor: pointer; }
+        .ablage-wahl button:hover, .ablage-wahl button:focus-visible { border-color: #173B2C; background: #E8F0E6; }
+        .ablage-wahl button:disabled { color: #8A948D; background: #F4F6F4; cursor: not-allowed; }
+        .ablage-wahl button small { display: block; color: #55625A; font-size: 0.8rem; }
         @media (max-width: 560px) {
             .theme-karten, .einst-zweispaltig { grid-template-columns: minmax(0, 1fr); }
         }
@@ -1102,6 +1140,63 @@
             var menues = document.querySelectorAll('details.menue[open]');
             for (var i = 0; i < menues.length; i++) menues[i].removeAttribute('open');
         });
+
+        // Dateien per Drag-and-Drop. Solange Dateien über dem Fenster schweben, trägt <body> die Klasse
+        // "zieht-datei" (Ablageflächen leuchten). Daneben fallengelassene Dateien öffnet der Browser nicht.
+        // Eine Ablagefläche (.ablage mit Datei-Feld) übernimmt die Dateien; mit data-senden wird gleich
+        // hochgeladen. Gibt es nur eine, nimmt sie Dateien von überall auf der Seite an.
+        (function () {
+            var ende;
+            function mitDateien(e) {
+                return e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types, 'Files') >= 0;
+            }
+            document.addEventListener('dragover', function (e) {
+                if (!mitDateien(e)) return;
+                e.preventDefault();
+                document.body.classList.add('zieht-datei');
+                clearTimeout(ende);
+                ende = setTimeout(function () { document.body.classList.remove('zieht-datei'); }, 200);
+            });
+            document.addEventListener('drop', function (e) {
+                if (!mitDateien(e)) return;
+                e.preventDefault();
+                document.body.classList.remove('zieht-datei');
+            });
+
+            var flaechen = document.querySelectorAll('.ablage');
+            function uebernehmen(flaeche, dateien) {
+                var feld = flaeche.querySelector('input[type=file]');
+                if (!dateien.length) return;
+                if (!feld.multiple && dateien.length > 1) {
+                    anzeigen(flaeche, 'Bitte nur eine Datei hineinziehen.');
+                    return;
+                }
+                feld.files = dateien;
+                anzeigen(flaeche);
+                if (flaeche.hasAttribute('data-senden')) feld.form.requestSubmit ? feld.form.requestSubmit() : feld.form.submit();
+            }
+            function anzeigen(flaeche, fehler) {
+                var feld = flaeche.querySelector('input[type=file]'), ziel = flaeche.querySelector('.ablage-dateien');
+                ziel.textContent = fehler || Array.prototype.map.call(feld.files, function (d) { return d.name; }).join(', ');
+                ziel.hidden = !ziel.textContent;
+            }
+            Array.prototype.forEach.call(flaechen, function (flaeche) {
+                flaeche.querySelector('input[type=file]').addEventListener('change', function () { anzeigen(flaeche); });
+                flaeche.addEventListener('dragover', function (e) { if (mitDateien(e)) flaeche.classList.add('ablage-drueber'); });
+                flaeche.addEventListener('dragleave', function () { flaeche.classList.remove('ablage-drueber'); });
+                flaeche.addEventListener('drop', function (e) {
+                    if (!mitDateien(e)) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    document.body.classList.remove('zieht-datei');
+                    flaeche.classList.remove('ablage-drueber');
+                    uebernehmen(flaeche, e.dataTransfer.files);
+                });
+            });
+            if (flaechen.length === 1) document.addEventListener('drop', function (e) {
+                if (mitDateien(e)) uebernehmen(flaechen[0], e.dataTransfer.files);
+            });
+        })();
 
         // Neue Version auch ohne Neuladen anzeigen: jede Minute den Update-Knopf nachfragen.
         // Fester Pfad statt url_for - ältere Versionen rendern diese Vorlage beim Update mit.

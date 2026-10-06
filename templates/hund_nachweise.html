@@ -70,10 +70,16 @@
     </p>
     <form action="{{ url_for('nachweis_hochladen', hund_id=hund.id) }}" method="POST" enctype="multipart/form-data">
         <input type="hidden" name="art" value="{{ gewaehlte_art }}">
+        {# Hineingezogene Dateien werden gleich hochgeladen - danach kommt ohnehin die Prüfseite #}
         <div class="form-group">
-            <label for="datei">{{ 'Fotos / Datei' if arten[gewaehlte_art].impfungen else 'Datei' }}</label>
-            <input type="file" id="datei" name="datei" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required
-                   {% if arten[gewaehlte_art].impfungen %}multiple{% endif %}>
+            <label class="ablage" data-senden>
+                <input type="file" id="datei" name="datei" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required
+                       {% if arten[gewaehlte_art].impfungen %}multiple{% endif %}>
+                <strong>{{ 'Fotos oder PDF' if arten[gewaehlte_art].impfungen else 'PDF oder Foto' }} hierher ziehen</strong>
+                <span>oder <span class="ablage-auswahl">{{ 'Dateien' if arten[gewaehlte_art].impfungen else 'Datei' }} auswählen</span></span>
+                <small>Loslassen klappt überall auf dieser Seite.</small>
+                <span class="ablage-dateien" hidden></span>
+            </label>
         </div>
         <button type="submit" class="btn btn-primary">Hochladen</button>
     </form>

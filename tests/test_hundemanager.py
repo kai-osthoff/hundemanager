@@ -897,6 +897,26 @@ class HaftpflichtOberflaecheTests(unittest.TestCase):
         koerper, typ = multipart('datei', 'anderer.pdf', test_pdf(bestaetigung_zeilen(heute, tier='Rocky')))
         self.assertIn('Rocky', self.oeffne('/hund/1/haftpflicht/hochladen', koerper, typ).decode('utf-8'))
 
+    def test_dateien_hineinziehen(self):
+        # Übersicht: Hund und Halter sind Ablageziele, ein Dialog fragt, was es ist
+        uebersicht = self.oeffne('/').decode('utf-8')
+        self.assertIn('einfach auf einen Hund oder Halter ziehen', uebersicht)
+        self.assertIn('id="ablage-dialog"', uebersicht)
+        self.assertIn('data-ablage-hund="Bello" data-ablage-url="/hund/1/haftpflicht/hochladen"', uebersicht)
+        self.assertIn('data-ablage-person="Jürgen Müller" data-ablage-url="/person/1/fotoeinwilligung/hochladen"',
+                      uebersicht)
+        self.assertIn('{"haftpflicht": "Haftpflicht", "impfpass": "Impfpass"}', uebersicht)
+        # Upload-Seiten: Ablagefläche; beim Nachweis wird gleich hochgeladen, bei der Einwilligung nicht
+        self.assertIn('<label class="ablage" data-senden>', self.oeffne('/hund/1/nachweise?art=impfpass').decode('utf-8'))
+        self.assertIn('<label class="ablage">', self.oeffne('/person/1/fotoeinwilligung').decode('utf-8'))
+
+        # So schickt der Dialog ab: Datei an die gewählte Adresse, die Art kommt vom Knopf
+        koerper, typ = multipart_mehrere([('art', 'impfpass')], [('datei', 'impfpass.jpg', textfoto('felder'))])
+        self.assertIn('Impfpass-Nachweis eintragen', self.oeffne('/hund/1/nachweise/hochladen', koerper, typ).decode('utf-8'))
+        koerper, typ = multipart_mehrere([('art', 'fotoeinwilligung')], [('datei', 'einwilligung.pdf', test_pdf(['Ja']))])
+        self.assertIn('Fotoeinwilligung von Jürgen Müller gespeichert',
+                      self.oeffne('/person/1/fotoeinwilligung/hochladen', koerper, typ).decode('utf-8'))
+
     def test_uebersicht_filter_und_pausierte(self):
         seite = self.oeffne('/').decode('utf-8')
         for name in ('Bello', 'Luna', 'Rex', 'Fiete'):

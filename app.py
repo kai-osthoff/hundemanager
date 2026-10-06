@@ -532,7 +532,8 @@ def index():
     return render_template('index.html', gruppen=gruppen, ansicht=ansicht, filter=filter_,
                            pausierte=pausierte if ansicht != 'alle' and not filter_ else [],
                            anzahl_pausiert=len(pausierte), kennzahlen=kennzahlen,
-                           gibt_personen=bool(alle_personen))
+                           gibt_personen=bool(alle_personen),
+                           ablage_arten={k: v['name'] for k, v in NACHWEIS_ARTEN.items()})
 
 def _person_angaben(person):
     """Übernimmt die Formularfelder. Gibt eine Fehlermeldung zurück oder None."""

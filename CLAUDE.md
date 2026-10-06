@@ -127,6 +127,9 @@ Programm passiert erst nach einer geprüften Sicherung.**
 - Erkennung (`nachweise.angaben_vorschlagen`) liefert nur Vorschläge (bisher nur
   Haftpflicht-PDFs); pypdf gibt Textblöcke in beliebiger Reihenfolge aus – Muster nie
   an der Reihenfolge festmachen.
+- **Drag-and-Drop:** Upload-Seiten haben eine Ablagefläche (`label.ablage`, Skript in base.html; `data-senden` lädt
+  gleich hoch). In der Übersicht sind Hundekarte und Halter Ablageziele (`data-ablage-*`); der Dialog
+  `ablage-dialog` fragt „Was ist das?“ und schickt die Datei an die vorhandenen Hochlade-Routen – keine eigene Route.
 - **Mehrere Dateien je Nachweis** (z. B. Tollwut-Seite + Impfseite): die erste steht am
   `Nachweis`, weitere in `nachweis_seite` (`nr` ab 2). `Nachweis.seiten` liefert alle.
 - **Drehen nur in der Anzeige:** `drehung` (0/90/180/270, im Uhrzeigersinn) am Nachweis bzw.
