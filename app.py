@@ -254,6 +254,13 @@ EINSTELLUNGEN = {
         'standard': 'https://www.hsv-grossbottwar.de/wp-content/uploads/2026/02/Einwilligung_Fotoaufnahmen_wolf.pdf',
         'art': 'url',
     },
+    'theme': {
+        'name': 'Farbschema',
+        'hilfe': 'Wie der Hundemanager aussieht. Die Daten bleiben gleich.',
+        'standard': 'tuerkis',
+        'art': 'auswahl',
+        'optionen': {'tuerkis': 'Türkis', 'gruen': 'Grün (bisher)'},
+    },
 }
 
 
@@ -1040,6 +1047,8 @@ def _einstellung_pruefen(schluessel, wert):
             not re.fullmatch(r'https?://[^\s/]+\.[^\s/]+(/\S*)?', wert):
         return f'{EINSTELLUNGEN[schluessel]["name"]}: bitte eine vollständige Adresse ' \
                f'eingeben, die mit https:// beginnt.'
+    if EINSTELLUNGEN[schluessel]['art'] == 'auswahl' and wert and wert not in EINSTELLUNGEN[schluessel]['optionen']:
+        return f'{EINSTELLUNGEN[schluessel]["name"]}: bitte einen Eintrag aus der Liste wählen.'
     return None
 
 

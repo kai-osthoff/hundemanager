@@ -4,10 +4,19 @@
     {% for schluessel, info in einstellungen_info.items() %}
     <div class="form-group">
         <label for="einstellung-{{ schluessel }}">{{ info.name }}</label>
+        {% if info.art == 'auswahl' %}
+        <select id="einstellung-{{ schluessel }}" name="{{ schluessel }}">
+            {% for wert, text in info.optionen.items() %}
+            <option value="{{ wert }}"{% if wert == (werte[schluessel] or info.standard) %} selected{% endif %}>{{ text }}</option>
+            {% endfor %}
+        </select>
+        <small>{{ info.hilfe }}</small>
+        {% else %}
         <input type="{{ info.art }}" id="einstellung-{{ schluessel }}" name="{{ schluessel }}"
                value="{{ werte[schluessel] or '' }}" placeholder="{{ info.standard }}" autocomplete="off">
         <small>{{ info.hilfe }}
             {% if werte[schluessel] %}<a href="{{ werte[schluessel] }}" target="_blank" rel="noopener">Link prüfen ↗</a>{% endif %}</small>
+        {% endif %}
     </div>
     {% endfor %}
     <div class="dialog-aktionen">

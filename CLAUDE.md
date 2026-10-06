@@ -182,6 +182,11 @@ Programm passiert erst nach einer geprüften Sicherung.**
   `EINSTELLUNGEN` (app.py). Leerer/Standardwert wird nicht gespeichert. Bearbeitet wird im
   Einstellungsdialog (`<dialog>` im Kopf jeder Seite), `/einstellungen` ist die Rückfallseite.
   Der Formular-Link (`fotoeinwilligung_link`) muss mit http(s):// beginnen.
+- Farbschema (`theme`, Art `auswahl`): Standard „Türkis“ (Farben/Formen von hsv-grossbottwar.de),
+  wählbar „Grün (bisher)“. `base.html` setzt `<html data-theme="…">`; der Grundstil dort ist Grün,
+  `_theme_tuerkis.html` legt Türkis per `[data-theme="tuerkis"]` darüber. Kein Tailwind/CDN:
+  die App läuft offline, ohne Build-Schritt. Schrift Poppins nur, wenn installiert (sonst
+  Century Gothic/Segoe UI). Neues Schema = Eintrag in `optionen` + eigene Stil-Datei.
 
 ## Releases
 

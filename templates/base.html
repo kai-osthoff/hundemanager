@@ -1,6 +1,6 @@
 <!-- templates/base.html -->
 <!DOCTYPE html>
-<html lang="de">
+<html lang="de" data-theme="{{ einstellungen_werte.theme }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -779,6 +779,7 @@
         .einstellungen-dialog input[type=url] { width: 100%; }
         .dialog-aktionen { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; margin-top: 20px; }
     </style>
+    {% include '_theme_tuerkis.html' %}
 </head>
 <body>
     <header>

@@ -1316,6 +1316,39 @@ class FotoeinwilligungTests(unittest.TestCase):
         self.assertIn(self.STANDARD_LINK, self.oeffne('/einstellungen').decode('utf-8'))
 
 
+class ThemeTests(unittest.TestCase):
+    """Farbschema in den Einstellungen: Türkis als Standard, das bisherige Grün wählbar."""
+
+    setUp = HaftpflichtOberflaecheTests.setUp
+    tearDown = HaftpflichtOberflaecheTests.tearDown
+    oeffne = HaftpflichtOberflaecheTests.oeffne
+    einstellen = FotoeinwilligungTests.einstellen
+
+    def gespeichert(self):
+        with closing(sqlite3.connect(self.db)) as v:
+            zeile = v.execute("SELECT wert FROM einstellung WHERE schluessel = 'theme'").fetchone()
+        return zeile and zeile[0]
+
+    def test_theme_waehlen(self):
+        seite = self.oeffne('/').decode('utf-8')
+        self.assertIn('data-theme="tuerkis"', seite)
+        self.assertIn('<option value="tuerkis" selected>Türkis</option>', seite)
+        self.assertIsNone(self.gespeichert())  # Standard wird nicht gespeichert
+
+        self.assertIn('Einstellungen gespeichert', self.einstellen(theme='gruen'))
+        for pfad in ('/', '/nachweise', '/einstellungen', '/sicherungen'):
+            self.assertIn('data-theme="gruen"', self.oeffne(pfad).decode('utf-8'))
+        self.assertEqual(self.gespeichert(), 'gruen')
+
+        # Unbekanntes Schema wird abgelehnt, das gewählte bleibt
+        self.assertIn('Farbschema: bitte', self.einstellen(theme='pink'))
+        self.assertEqual(self.gespeichert(), 'gruen')
+
+        self.einstellen(standard='1', theme='gruen')
+        self.assertIn('data-theme="tuerkis"', self.oeffne('/').decode('utf-8'))
+        self.assertIsNone(self.gespeichert())
+
+
 class BilderTests(unittest.TestCase):
     """Fotos richtig herum - erkannt am Inhalt, gedreht wird nur die Anzeige."""
 
