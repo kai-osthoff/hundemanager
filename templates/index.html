@@ -5,7 +5,9 @@
 <div style="display: flex; gap: 10px; flex-wrap: wrap;">
     <a href="{{ url_for('person_neu') }}" class="btn-rund btn-hell">+ Neue Person</a>
     <a href="{{ url_for('nachweise_uebersicht') }}" class="btn-rund btn-umriss">Nachweise</a>
-    <a href="{{ url_for('export_excel') }}" class="btn-rund btn-umriss">Excel-Export</a>
+    <a href="{{ url_for('export_excel') }}" class="btn-rund btn-umriss btn-symbol" title="Excel-Export" aria-label="Excel-Export">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3h7v18h-7M14 8h7M14 13h7M17.5 3v18"/><path d="M3 5l11-2v18L3 19zM6 9l5 6M11 9l-5 6"/></svg>
+    </a>
 </div>
 {% endblock %}
 

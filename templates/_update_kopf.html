@@ -14,6 +14,8 @@
     </div>
 {% else %}
     <form action="{{ url_for('update_pruefen') }}" method="POST" data-stand="aktuell">
-        <button type="submit" class="btn-rund btn-umriss">Updates suchen</button>
+        <button type="submit" class="btn-rund btn-umriss btn-symbol" title="Updates suchen" aria-label="Updates suchen">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 10-12h-7z"/></svg>
+        </button>
     </form>
 {% endif %}
