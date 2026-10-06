@@ -915,6 +915,20 @@ class HaftpflichtOberflaecheTests(unittest.TestCase):
         self.assertNotIn('Noch keine Einträge', seite)
         self.assertIn('Bello', self.oeffne('/?ansicht=alle').decode('utf-8'))
 
+    def test_hundekarte_und_impfungen_klickbar(self):
+        with closing(sqlite3.connect(self.db)) as v:
+            v.execute('UPDATE hund SET gueltig_t = ? WHERE id = 1', (date(2027, 5, 14).isoformat(),))
+            v.commit()
+        seite = self.oeffne('/').decode('utf-8')
+        # Die ganze Karte führt zu den Nachweisen, jede Impfung zum Impfpass
+        self.assertIn('<a href="/hund/1/nachweise" class="karte-link">Bello</a>', seite)
+        self.assertEqual(len(re.findall(r'<a href="/hund/1/nachweise\?art=impfpass" class="kachel ', seite)), 4)
+        self.assertIn('<strong>05/27</strong>', seite)
+        self.assertIn('T: gültig bis 14.05.2027', seite)
+        # Halter-Aktionen stecken in Menüs statt in einer Knopfreihe
+        self.assertIn('class="menue', seite)
+        self.assertIn('Pausieren</button>', seite)
+
     def test_kennzahl_kacheln_filtern(self):
         heute = date.today()
         with closing(sqlite3.connect(self.db)) as v:

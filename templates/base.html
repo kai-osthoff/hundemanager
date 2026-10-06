@@ -553,17 +553,20 @@
         }
         .filter a[aria-current="page"] { background: #15201A; color: #FFFFFF; border-color: #15201A; font-weight: 600; }
 
-        .halter { margin-bottom: 28px; }
+        /* Übersicht: Halter stehen nebeneinander, jeder so breit wie seine Hunde */
+        .halter-liste { display: flex; flex-wrap: wrap; gap: 28px 32px; align-items: flex-start; margin-bottom: 28px; }
+        .halter-liste > .kein-hund { flex: 1 1 100%; }
+        .halter { max-width: 100%; min-width: min(288px, 100%); display: flex; flex-direction: column; gap: 10px; }
         .halter-kopf {
             display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            flex-wrap: wrap;
-            margin-bottom: 12px;
+            flex-direction: column;
+            gap: 6px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #C9D6CC;
         }
-        .halter-kopf h3 { font-size: 1.15rem; font-weight: 700; }
-        .halter-info { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .halter-zeile { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        .halter-kopf h3 { font-size: 0.95rem; font-weight: 700; margin-right: 2px; }
+        .halter-mehr { margin-left: auto; }
         .halter-aktionen { display: flex; gap: 6px; flex-wrap: wrap; }
         .halter-aktionen form { display: inline; }
         .knopf {
@@ -595,34 +598,115 @@
         .etikett-grau { background: #E4E8E5; color: #4A514D; }
         .etikett-warn { background: #FFF1D6; color: #5C3800; }
         .etikett-alarm { background: #FBE3E1; color: #7A1A13; }
+        .etikett-klein { font-size: 0.7rem; padding: 1px 8px; white-space: nowrap; }
 
-        .hunde-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(min(330px, 100%), 1fr));
-            gap: 16px;
-        }
-        .hund-karte {
+        /* Feine Knöpfe der Übersicht */
+        .mini {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            height: 28px;
+            padding: 0 9px;
+            border: 1px solid #C9D6CC;
+            border-radius: 8px;
             background: #FFFFFF;
-            border-radius: 20px;
-            padding: 22px;
+            color: #15201A;
+            font: inherit;
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-decoration: none;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: background 0.12s, border-color 0.12s;
+        }
+        .mini:hover { border-color: #15201A; background: #F3F7F2; color: #15201A; }
+        .mini-icon { width: 28px; padding: 0; justify-content: center; }
+        .mini-nackt { border-color: transparent; background: transparent; color: #55625A; }
+        .mini-nackt:hover { border-color: #C9D6CC; background: #FFFFFF; }
+        .mini-wa { color: #0B5A2E; border-color: #9FD8B3; background: #EEF9F1; }
+        .mini-mail { color: #1C3F8C; border-color: #AFC3EA; background: #EEF3FC; }
+
+        /* Aufklapp-Menüs: <details> öffnet ohne Skript, ein kleines Skript in base.html schließt beim Klick daneben */
+        .menue { position: relative; }
+        .menue[open] { z-index: 30; }
+        .menue > summary { list-style: none; }
+        .menue > summary::-webkit-details-marker { display: none; }
+        .menue-liste {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            min-width: 220px;
+            padding: 4px;
             display: flex;
             flex-direction: column;
-            gap: 14px;
+            background: #FFFFFF;
+            border: 1px solid #DCE5DD;
+            border-radius: 12px;
+            box-shadow: 0 12px 32px rgba(23, 59, 44, 0.14);
         }
-        .hund-karte.status-bald { box-shadow: inset 0 0 0 2px #F0C060; }
-        .hund-karte.status-abgelaufen { box-shadow: inset 0 0 0 2px #D9726B; }
+        .menue-rechts .menue-liste { left: auto; right: 0; }
+        .menue-liste form { display: block; }
+        .menue-liste a,
+        .menue-liste button {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            padding: 8px 10px;
+            border: 0;
+            border-radius: 8px;
+            background: none;
+            color: #15201A;
+            font: inherit;
+            font-size: 0.85rem;
+            font-weight: 400;
+            text-align: left;
+            text-decoration: none;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+        .menue-liste a:hover,
+        .menue-liste button:hover { background: #F3F7F2; color: #0F2A1F; }
+        .menue-liste .mail-hilfe-knopf { color: #55625A; }
+        .menue-liste .gefahr { color: #8E1F17; }
+        .menue-liste .gefahr:hover { background: #FBE3E1; color: #7A1A13; }
+        .menue-liste hr { border: 0; border-top: 1px solid #EEF1EE; margin: 4px 0; }
+
+        /* Kompakte Hundekarte: die ganze Karte ist ein Link (über den Namen), Kacheln und Menü liegen darüber */
+        .hunde-grid { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
+        .hund-karte {
+            --ring: transparent;
+            position: relative;
+            flex: none;
+            width: 288px;
+            max-width: 100%;
+            background: #FFFFFF;
+            border-radius: 14px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            box-shadow: inset 0 0 0 2px var(--ring);
+            transition: box-shadow 0.12s;
+        }
+        .hund-karte:hover { box-shadow: inset 0 0 0 2px var(--ring), 0 0 0 1.5px #173B2C, 0 6px 18px rgba(23, 59, 44, 0.12); }
+        .hund-karte.status-bald { --ring: #F0C060; }
+        .hund-karte.status-abgelaufen { --ring: #D9726B; }
         .hund-karte.ist-pausiert { opacity: 0.6; }
-        .hund-kopf { display: flex; align-items: center; gap: 14px; }
+        .karte-link { color: inherit; text-decoration: none; }
+        .karte-link::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
+        .hund-karte .menue, .kachel, .haft-zeile, .nachfrage { position: relative; z-index: 1; }
+        .hund-karte .menue[open] { z-index: 30; }
+        .hund-kopf { display: flex; align-items: center; gap: 8px; }
         .avatar {
             flex: none;
-            width: 52px;
-            height: 52px;
+            width: 30px;
+            height: 30px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: 800;
-            font-size: 1.35rem;
+            font-size: 0.8rem;
             background: #DCEBD9;
             color: #173B2C;
         }
@@ -632,16 +716,16 @@
         .hund-name { flex: 1; min-width: 0; }
         .hund-name h4 {
             font-family: 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
-            font-size: 1.45rem;
-            font-weight: 800;
-            line-height: 1.1;
+            font-size: 0.95rem;
+            font-weight: 700;
+            line-height: 1.25;
         }
-        .hund-name div { font-size: 0.875rem; color: #55625A; }
+        .hund-name div { font-size: 0.7rem; color: #55625A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .gesamt {
             flex: none;
-            font-size: 0.8rem;
+            font-size: 0.65rem;
             font-weight: 700;
-            padding: 5px 12px;
+            padding: 2px 8px;
             border-radius: 999px;
         }
         .gesamt-ok { background: #DFF2E3; color: #1B5E36; }
@@ -665,19 +749,52 @@
         .impf-keine-angabe { background: #EEF1EE; }
         .impf-keine-angabe dd { color: #55625A; font-weight: 500; }
 
+        /* Impfungen als Kacheln in einer Reihe - jede führt zum Impfpass */
+        .impf-kacheln { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+        .kachel {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+            padding: 5px 7px;
+            border-radius: 8px;
+            line-height: 1.2;
+            text-decoration: none;
+            background: #F3F7F2;
+            color: #1B5E36;
+        }
+        .kachel small { font-size: 0.6rem; font-weight: 500; opacity: 0.85; }
+        .kachel strong { font-size: 0.75rem; font-weight: 700; }
+        .kachel:hover { box-shadow: inset 0 0 0 1.5px currentColor; }
+        .kachel-bald-ablaufend { background: #FFF1D6; color: #5C3800; }
+        .kachel-abgelaufen { background: #FBE3E1; color: #7A1A13; }
+        .kachel-keine-angabe { background: #FFFFFF; color: #55625A; box-shadow: inset 0 0 0 1px #C9D6CC; }
+
         .haft-zeile {
             display: flex;
             align-items: center;
-            gap: 10px;
-            min-height: 48px;
-            padding: 10px 14px;
-            border-radius: 12px;
+            gap: 7px;
+            padding: 6px 8px;
+            border-radius: 8px;
             text-decoration: none;
+            font-size: 0.75rem;
             font-weight: 600;
             background: #DFF2E3;
             color: #1B5E36;
         }
-        .haft-zeile span:last-child { margin-left: auto; font-weight: 500; font-size: 0.85rem; text-decoration: underline; }
+        .haft-zeile:hover { box-shadow: inset 0 0 0 1.5px currentColor; }
+        .haft-zeile span:last-child { margin-left: auto; font-weight: 500; text-decoration: underline; text-underline-offset: 2px; }
+        .nachfrage {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding-top: 6px;
+            border-top: 1px solid #EEF1EE;
+            font-size: 0.7rem;
+            color: #55625A;
+        }
+        .nachfrage span { flex: 1; }
+        .nachfrage .mini-icon { width: 26px; height: 26px; }
+        .hund-bemerkung { font-size: 0.7rem; color: #55625A; }
         .haft-bald { background: #FFF1D6; color: #5C3800; }
         .haft-abgelaufen, .haft-keine-angabe { background: #FBE3E1; color: #7A1A13; }
         .haft-ohne-nachweis { background: #FFF1D6; color: #5C3800; }
@@ -722,16 +839,6 @@
         .mail-hilfe p { margin-bottom: 10px; }
         a.etikett { text-decoration: none; }
         .form-group small { display: block; margin-top: 4px; font-size: 0.85rem; color: #55625A; }
-        .hund-fuss {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 10px;
-            flex-wrap: wrap;
-            font-size: 0.875rem;
-            color: #55625A;
-        }
-        .hund-fuss form { display: inline; }
         .kein-hund {
             background: #FFFFFF;
             border: 1px dashed #C9D6CC;
@@ -890,6 +997,21 @@
             var link = ereignis.target.closest && ereignis.target.closest('a[href^="mailto:"]');
             if (link) fetch('/email/geklickt', {method: 'POST', keepalive: true}).catch(function () {});
         }, true);
+
+        // Aufklapp-Menüs (<details class="menue">) schließen beim Klick daneben oder auf einen Eintrag und mit Esc.
+        document.addEventListener('click', function (ereignis) {
+            var menues = document.querySelectorAll('details.menue[open]');
+            for (var i = 0; i < menues.length; i++) {
+                var liste = menues[i].querySelector('.menue-liste');
+                if (!menues[i].contains(ereignis.target) || (liste && liste.contains(ereignis.target)))
+                    menues[i].removeAttribute('open');
+            }
+        });
+        document.addEventListener('keydown', function (ereignis) {
+            if (ereignis.key !== 'Escape') return;
+            var menues = document.querySelectorAll('details.menue[open]');
+            for (var i = 0; i < menues.length; i++) menues[i].removeAttribute('open');
+        });
 
         // Neue Version auch ohne Neuladen anzeigen: jede Minute den Update-Knopf nachfragen.
         // Fester Pfad statt url_for - ältere Versionen rendern diese Vorlage beim Update mit.

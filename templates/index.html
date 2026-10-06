@@ -39,40 +39,65 @@
     </nav>
 </div>
 
+{# Halter stehen nebeneinander, so breit wie ihre Hunde - Aktionen in Aufklapp-Menüs (<details>, ohne Skript) #}
+{% set pfeil %}<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>{% endset %}
+{% set icon_wa %}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1.4-4.2A8 8 0 1 1 8.3 18.7z"/><path d="M9 10h6M9 13.5h4"/></svg>{% endset %}
+{% set icon_mail %}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>{% endset %}
+{% set icon_mehr %}<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>{% endset %}
+<div class="halter-liste">
 {% for gruppe in gruppen %}
 {% set person = gruppe.person %}
 <section class="halter" aria-label="{{ person.vollstaendiger_name }}">
     <div class="halter-kopf">
-        <div class="halter-info">
+        <div class="halter-zeile">
             <h3>{{ person.nachname }}, {{ person.vorname }}</h3>
-            {% if not person.aktiv %}<span class="etikett etikett-grau">Pausiert</span>{% endif %}
+            {% if not person.aktiv %}<span class="etikett etikett-klein etikett-grau">Pausiert</span>{% endif %}
             {% set foto = person.foto_status %}
-            <a href="{{ url_for('fotoeinwilligung', person_id=person.id) }}" class="etikett {{ {'nachgewiesen': '', 'ohne-nachweis': 'etikett-warn', 'widerrufen': 'etikett-grau', 'fehlt': 'etikett-alarm'}[foto] }}"
-               title="Fotoeinwilligung ansehen oder hochladen">{{ {'nachgewiesen': 'Fotoeinwilligung ✓', 'ohne-nachweis': 'Fotofreigabe ohne Nachweis', 'widerrufen': 'Fotoeinwilligung widerrufen', 'fehlt': 'Keine Fotoeinwilligung'}[foto] }}</a>
-            {% if not person.mobil %}<a href="{{ url_for('person_bearbeiten', person_id=person.id) }}" class="etikett etikett-grau">Handynummer fehlt</a>{% endif %}
+            <a href="{{ url_for('fotoeinwilligung', person_id=person.id) }}" class="etikett etikett-klein {{ {'nachgewiesen': '', 'ohne-nachweis': 'etikett-warn', 'widerrufen': 'etikett-grau', 'fehlt': 'etikett-alarm'}[foto] }}"
+               title="{{ {'nachgewiesen': 'Fotoeinwilligung ✓', 'ohne-nachweis': 'Fotofreigabe ohne Nachweis', 'widerrufen': 'Fotoeinwilligung widerrufen', 'fehlt': 'Keine Fotoeinwilligung'}[foto] }} – ansehen oder hochladen">{{ {'nachgewiesen': 'Foto ✓', 'ohne-nachweis': 'Foto ohne Nachweis', 'widerrufen': 'Foto widerrufen', 'fehlt': 'Foto fehlt'}[foto] }}</a>
+            {% if not person.mobil %}<a href="{{ url_for('person_bearbeiten', person_id=person.id) }}" class="etikett etikett-klein etikett-grau">Handynummer fehlt</a>{% endif %}
+            <details class="menue menue-rechts halter-mehr">
+                <summary class="mini mini-icon mini-nackt" aria-label="Weitere Aktionen für {{ person.vollstaendiger_name }}" title="Weitere Aktionen">{{ icon_mehr }}</summary>
+                <div class="menue-liste">
+                    <a href="{{ url_for('person_bearbeiten', person_id=person.id) }}">Halter bearbeiten</a>
+                    <form action="{{ url_for('person_toggle_aktiv', person_id=person.id) }}" method="POST">
+                        <button type="submit" title="{{ 'Ausblenden, bleibt unter „Pausiert“ erhalten' if person.aktiv else 'Wieder in der Übersicht anzeigen' }}">{{ 'Pausieren' if person.aktiv else 'Wieder aktivieren' }}</button>
+                    </form>
+                    <hr>
+                    <form action="{{ url_for('person_loeschen', person_id=person.id) }}" method="POST" onsubmit="return confirm('{{ person.vollstaendiger_name }} und alle Hunde wirklich löschen?\n\nTipp: „Pausieren“ blendet nur aus.');">
+                        <button type="submit" class="gefahr">Löschen …</button>
+                    </form>
+                </div>
+            </details>
         </div>
-        <div class="halter-aktionen">
-            {% if person.whatsapp_link %}
-            <a href="{{ person.whatsapp_link }}" target="whatsapp" rel="noopener" class="knopf knopf-whatsapp" title="Chat mit {{ person.vorname }} in WhatsApp Web öffnen"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1.4-4.2A8 8 0 1 1 8.3 18.7z"/><path d="M9 10h6M9 13.5h4"/></svg> WhatsApp</a>
-            {% endif %}
-            {% if person.fotoeinwilligung_anfrage %}
-            <a href="{{ person.fotoeinwilligung_anfrage }}" target="whatsapp" rel="noopener" class="knopf knopf-whatsapp" title="Einwilligung zu Fotoaufnahmen mit Link zum Formular per WhatsApp anfragen"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg> Fotoeinwilligung anfragen</a>
+        <div class="halter-zeile">
+            {% if person.whatsapp_link or person.fotoeinwilligung_anfrage %}
+            <details class="menue">
+                <summary class="mini">{{ icon_wa }} WhatsApp {{ pfeil }}</summary>
+                <div class="menue-liste">
+                    {% if person.whatsapp_link %}
+                    <a href="{{ person.whatsapp_link }}" target="whatsapp" rel="noopener" title="Chat mit {{ person.vorname }} in WhatsApp Web öffnen">Nachricht schreiben</a>
+                    {% endif %}
+                    {% if person.fotoeinwilligung_anfrage %}
+                    <a href="{{ person.fotoeinwilligung_anfrage }}" target="whatsapp" rel="noopener" title="Einwilligung zu Fotoaufnahmen mit Link zum Formular per WhatsApp anfragen">Fotoeinwilligung anfragen</a>
+                    {% endif %}
+                </div>
+            </details>
             {% endif %}
             {% if person.email_link %}
-            <a href="{{ person.email_link }}" class="knopf knopf-mail" title="E-Mail an {{ person.email }} schreiben"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg> E-Mail</a>
-            {% if person.fotoeinwilligung_mail %}
-            <a href="{{ person.fotoeinwilligung_mail }}" class="knopf knopf-mail" title="Einwilligung zu Fotoaufnahmen mit Link zum Formular per E-Mail anfragen"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg> Fotoeinwilligung per E-Mail</a>
+            <details class="menue">
+                <summary class="mini">{{ icon_mail }} E-Mail {{ pfeil }}</summary>
+                <div class="menue-liste">
+                    <a href="{{ person.email_link }}" title="E-Mail an {{ person.email }} schreiben">E-Mail schreiben</a>
+                    {% if person.fotoeinwilligung_mail %}
+                    <a href="{{ person.fotoeinwilligung_mail }}" title="Einwilligung zu Fotoaufnahmen mit Link zum Formular per E-Mail anfragen">Fotoeinwilligung anfragen</a>
+                    {% endif %}
+                    {% if mail_hilfe_zeigen %}<hr>{% endif %}
+                    {% include '_mail_hilfe_knopf.html' %}
+                </div>
+            </details>
             {% endif %}
-            {% include '_mail_hilfe_knopf.html' %}
-            {% endif %}
-            <a href="{{ url_for('hund_neu', person_id=person.id) }}" class="knopf">+ Hund</a>
-            <a href="{{ url_for('person_bearbeiten', person_id=person.id) }}" class="knopf">Bearbeiten</a>
-            <form action="{{ url_for('person_toggle_aktiv', person_id=person.id) }}" method="POST">
-                <button type="submit" class="knopf" title="{{ 'Ausblenden, bleibt unter „Pausiert“ erhalten' if person.aktiv else 'Wieder in der Übersicht anzeigen' }}">{{ 'Pausieren' if person.aktiv else 'Wieder aktivieren' }}</button>
-            </form>
-            <form action="{{ url_for('person_loeschen', person_id=person.id) }}" method="POST" onsubmit="return confirm('{{ person.vollstaendiger_name }} und alle Hunde wirklich löschen?\n\nTipp: „Pausieren“ blendet nur aus.');">
-                <button type="submit" class="knopf knopf-gefahr">Löschen</button>
-            </form>
+            <a href="{{ url_for('hund_neu', person_id=person.id) }}" class="mini">+ Hund</a>
         </div>
     </div>
 
@@ -80,73 +105,70 @@
     <div class="hunde-grid">
         {% for h in gruppe.hunde %}
         {% set hund = h.hund %}
+        {# Die ganze Karte führt zu den Nachweisen des Hundes; Kacheln, Zeilen und Menü liegen darüber #}
         <article class="hund-karte status-{{ h.gesamt }} {{ 'ist-pausiert' if not person.aktiv }}" aria-label="{{ hund.name }}">
             <div class="hund-kopf">
                 <div class="avatar" aria-hidden="true">{{ hund.name[:1]|upper }}</div>
                 <div class="hund-name">
-                    <h4>{{ hund.name }}</h4>
+                    <h4><a href="{{ url_for('hund_nachweise', hund_id=hund.id) }}" class="karte-link">{{ hund.name }}</a></h4>
                     <div>{% if hund.geburtstag %}geb. {{ hund.geburtstag|format_datum }}{% else %}Geburtstag unbekannt{% endif %}</div>
                 </div>
                 <span class="gesamt gesamt-{{ h.gesamt }}">{{ h.gesamt_text }}</span>
+                <details class="menue menue-rechts">
+                    <summary class="mini mini-icon mini-nackt" aria-label="Weitere Aktionen für {{ hund.name }}" title="Weitere Aktionen">{{ icon_mehr }}</summary>
+                    <div class="menue-liste">
+                        <a href="{{ url_for('hund_nachweise', hund_id=hund.id, art='impfpass') }}" title="Fotos vom Impfpass hochladen und Impfungen eintragen">Impfpass</a>
+                        <a href="{{ url_for('hund_bearbeiten', hund_id=hund.id) }}">Hund bearbeiten</a>
+                        <hr>
+                        <form action="{{ url_for('hund_loeschen', hund_id=hund.id) }}" method="POST" onsubmit="return confirm('{{ hund.name }} wirklich löschen?');">
+                            <button type="submit" class="gefahr" aria-label="{{ hund.name }} löschen">Löschen …</button>
+                        </form>
+                    </div>
+                </details>
             </div>
 
-            <dl class="impf-grid">
+            <div class="impf-kacheln">
                 {% for i in h.impfungen %}
-                <div class="impf impf-{{ i.status }}">
-                    <dt>{{ i.name }}{% if i.hinweis %} · {{ i.hinweis }}{% endif %}</dt>
-                    <dd>{{ i.datum|format_datum if i.datum else 'nicht eingetragen' }}</dd>
-                </div>
+                <a href="{{ url_for('hund_nachweise', hund_id=hund.id, art='impfpass') }}" class="kachel kachel-{{ i.status }}"
+                   title="{{ i.name }}: {% if i.datum %}gültig bis {{ i.datum|format_datum }}{% if i.hinweis %} ({{ i.hinweis }}){% endif %}{% else %}nicht eingetragen – Impfpass hochladen{% endif %}">
+                    <small>{{ i.name.split('/')[0] }}</small>
+                    <strong>{{ i.datum.strftime('%m/%y') if i.datum else '+ fehlt' }}</strong>
+                </a>
                 {% endfor %}
-            </dl>
+            </div>
 
             <a href="{{ url_for('hund_nachweise', hund_id=hund.id) }}" class="haft-zeile haft-{{ h.haftpflicht }}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6z"/></svg>
                 {% if h.nachweis %}
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 14l2 2 3-4"/></svg>
-                    <span>Haftpflicht bis {{ h.nachweis.gueltig_bis|format_datum }}{% if h.haftpflicht == 'abgelaufen' %} – abgelaufen{% endif %}</span>
-                    <span>{{ 'Neuen Nachweis hochladen' if h.haftpflicht == 'abgelaufen' else 'Nachweis ansehen' }}</span>
+                    <span>Haftpflicht bis {{ h.nachweis.gueltig_bis|format_datum }}</span>
+                    {% if h.haftpflicht == 'abgelaufen' %}<span title="Neuen Nachweis hochladen">Neu hochladen</span>{% else %}<span title="Nachweis ansehen">Ansehen</span>{% endif %}
                 {% else %}
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg>
-                    <span>{{ 'Haftpflicht: Nachweis fehlt' if h.haftpflicht == 'ohne-nachweis' else 'Keine Haftpflicht hinterlegt' }}</span>
+                    <span>{{ 'Haftpflicht: Nachweis fehlt' if h.haftpflicht == 'ohne-nachweis' else 'Keine Haftpflicht' }}</span>
                     <span>Hochladen</span>
                 {% endif %}
             </a>
 
             {% if h.nachfragen %}
+            {% set anzahl = h.nachfragen|length %}
+            <div class="nachfrage" title="{{ h.nachfragen|join(' · ') }}">
+                {% if h.whatsapp_nachfrage or h.email_nachfrage %}
+                <span>{{ anzahl }} {{ 'Angabe fehlt' if anzahl == 1 else 'Angaben fehlen' }} – anfragen</span>
                 {% if h.whatsapp_nachfrage %}
-                <a href="{{ h.whatsapp_nachfrage }}" target="whatsapp" rel="noopener" class="wa-zeile"
-                   title="{{ h.nachfragen|join(' · ') }}">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1.4-4.2A8 8 0 1 1 8.3 20.7z"/><path d="M9 10h6M9 13.5h4"/></svg>
-                    <span>{{ h.nachfragen|length }} fehlende {{ 'Angabe' if h.nachfragen|length == 1 else 'Angaben' }} per WhatsApp anfragen</span>
-                </a>
+                <a href="{{ h.whatsapp_nachfrage }}" target="whatsapp" rel="noopener" class="mini mini-icon mini-wa"
+                   aria-label="Fehlende Angaben per WhatsApp anfragen" title="Fehlende Angaben per WhatsApp anfragen">{{ icon_wa }}</a>
                 {% endif %}
                 {% if h.email_nachfrage %}
-                <div class="mail-reihe">
-                    <a href="{{ h.email_nachfrage }}" class="wa-zeile mail-zeile" title="{{ h.nachfragen|join(' · ') }}">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
-                        <span>{{ h.nachfragen|length }} fehlende {{ 'Angabe' if h.nachfragen|length == 1 else 'Angaben' }} per E-Mail anfragen</span>
-                    </a>
-                    {% include '_mail_hilfe_knopf.html' %}
-                </div>
+                <a href="{{ h.email_nachfrage }}" class="mini mini-icon mini-mail"
+                   aria-label="Fehlende Angaben per E-Mail anfragen" title="Fehlende Angaben per E-Mail anfragen">{{ icon_mail }}</a>
                 {% endif %}
-                {% if not h.whatsapp_nachfrage and not h.email_nachfrage %}
-                <div class="wa-zeile wa-ohne-nummer">
-                    <span>Für eine WhatsApp-Nachfrage fehlt die Handynummer.</span>
-                    <a href="{{ url_for('person_bearbeiten', person_id=person.id) }}">Nummer eintragen</a>
-                </div>
+                {% else %}
+                <span>{{ anzahl }} {{ 'Angabe fehlt' if anzahl == 1 else 'Angaben fehlen' }} –
+                    <a href="{{ url_for('person_bearbeiten', person_id=person.id) }}" title="Für eine WhatsApp-Nachfrage fehlt die Handynummer.">Nummer eintragen</a></span>
                 {% endif %}
+            </div>
             {% endif %}
 
-            <div class="hund-fuss">
-                <span>{{ hund.bemerkung or '' }}</span>
-                <span style="display: flex; gap: 6px;">
-                    <a href="{{ url_for('hund_nachweise', hund_id=hund.id, art='impfpass') }}" class="knopf"
-                       title="Fotos vom Impfpass hochladen und Impfungen eintragen">Impfpass</a>
-                    <a href="{{ url_for('hund_bearbeiten', hund_id=hund.id) }}" class="knopf">Bearbeiten</a>
-                    <form action="{{ url_for('hund_loeschen', hund_id=hund.id) }}" method="POST" onsubmit="return confirm('{{ hund.name }} wirklich löschen?');">
-                        <button type="submit" class="knopf knopf-gefahr" aria-label="{{ hund.name }} löschen">Löschen</button>
-                    </form>
-                </span>
-            </div>
+            {% if hund.bemerkung %}<div class="hund-bemerkung">{{ hund.bemerkung }}</div>{% endif %}
         </article>
         {% endfor %}
     </div>
@@ -171,6 +193,7 @@
     {% endif %}
 </div>
 {% endfor %}
+</div>
 
 {% if pausierte %}
 <details class="pausiert">

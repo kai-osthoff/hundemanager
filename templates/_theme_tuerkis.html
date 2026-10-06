@@ -54,7 +54,20 @@
     [data-theme="tuerkis"] .filter a { border: 2px solid #212121; color: #212121; font-weight: 600; }
     [data-theme="tuerkis"] .filter a:hover { background: #EBEBEB; }
     [data-theme="tuerkis"] .filter a[aria-current="page"] { background: #212121; color: #FFFFFF; }
-    [data-theme="tuerkis"] .halter-kopf { padding-bottom: 12px; border-bottom: 4px solid #212121; }
+    [data-theme="tuerkis"] .halter-kopf { border-bottom: 2px solid #212121; }
+    [data-theme="tuerkis"] .halter-kopf h3 { font-weight: 600; }
+    [data-theme="tuerkis"] .mini { border-color: #D3E2E0; color: #167E79; }
+    [data-theme="tuerkis"] .mini:hover { background: #E6F7F6; border-color: #167E79; color: #0F5E5A; }
+    [data-theme="tuerkis"] .mini-nackt { border-color: transparent; background: transparent; color: #4E4B66; }
+    [data-theme="tuerkis"] .mini-nackt:hover { border-color: #D3E2E0; background: #FFFFFF; }
+    [data-theme="tuerkis"] .menue-liste { border-color: #D9D9D9; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12); }
+    [data-theme="tuerkis"] .menue-liste a,
+    [data-theme="tuerkis"] .menue-liste button { color: #212121; }
+    [data-theme="tuerkis"] .menue-liste a:hover,
+    [data-theme="tuerkis"] .menue-liste button:hover { background: #E6F7F6; color: #0F5E5A; }
+    [data-theme="tuerkis"] .menue-liste .mail-hilfe-knopf { color: #4E4B66; }
+    [data-theme="tuerkis"] .menue-liste .gefahr { color: #B3261E; }
+    [data-theme="tuerkis"] .menue-liste .gefahr:hover { background: #FCE4E2; color: #B3261E; }
 
     /* Etiketten und Status: Olivgrün und Braun aus der Vereinspalette, dazu Bernstein und Rot */
     [data-theme="tuerkis"] .etikett { background: #EEF3EA; color: #4F6B42; border: 1px solid currentColor; }
@@ -62,20 +75,31 @@
     [data-theme="tuerkis"] .etikett-warn { background: #FFF6DB; color: #7A4F00; }
     [data-theme="tuerkis"] .etikett-alarm { background: #FCE4E2; color: #B3261E; }
 
-    [data-theme="tuerkis"] .hund-karte { border: 1px solid #E2E2E2; box-shadow: inset 0 6px 0 #759465; padding-top: 28px; }
-    [data-theme="tuerkis"] .hund-karte.status-bald { box-shadow: inset 0 6px 0 #E0A100; }
-    [data-theme="tuerkis"] .hund-karte.status-abgelaufen { box-shadow: inset 0 6px 0 #C62828; }
-    [data-theme="tuerkis"] .hund-karte.status-unvollstaendig { box-shadow: inset 0 6px 0 #846157; }
+    /* Karte: feine Linie, Status als Streifen oben */
+    [data-theme="tuerkis"] .hund-karte { --streifen: #759465; border: 1px solid #E6E6E6; box-shadow: inset 0 3px 0 var(--streifen); }
+    [data-theme="tuerkis"] .hund-karte:hover { border-color: #167E79; box-shadow: inset 0 3px 0 var(--streifen), 0 4px 14px rgba(22, 126, 121, 0.12); }
+    [data-theme="tuerkis"] .hund-karte.status-bald { --streifen: #E0A100; }
+    [data-theme="tuerkis"] .hund-karte.status-abgelaufen { --streifen: #C62828; }
+    [data-theme="tuerkis"] .hund-karte.status-unvollstaendig { --streifen: #846157; }
     [data-theme="tuerkis"] .avatar,
     [data-theme="tuerkis"] .status-bald .avatar,
     [data-theme="tuerkis"] .status-abgelaufen .avatar,
-    [data-theme="tuerkis"] .status-unvollstaendig .avatar { background: #212121; color: #FFFFFF; font-weight: 700; }
-    [data-theme="tuerkis"] .hund-name h4 { font-weight: 700; }
-    [data-theme="tuerkis"] .gesamt { text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.7rem; }
-    [data-theme="tuerkis"] .gesamt-ok { background: #EEF3EA; color: #4F6B42; }
+    [data-theme="tuerkis"] .status-unvollstaendig .avatar { background: #212121; color: #FFFFFF; font-weight: 600; }
+    [data-theme="tuerkis"] .hund-name h4 { font-weight: 600; }
+    [data-theme="tuerkis"] .karte-link { color: #212121; }
+    [data-theme="tuerkis"] .hund-name div { color: #6B6880; }
+    [data-theme="tuerkis"] .gesamt { font-size: 0.65rem; font-weight: 600; letter-spacing: 0.02em; }
+    [data-theme="tuerkis"] .gesamt-ok { background: #F0F5EC; color: #4F6B42; }
     [data-theme="tuerkis"] .gesamt-bald { background: #FFF6DB; color: #7A4F00; }
-    [data-theme="tuerkis"] .gesamt-abgelaufen { background: #FCE4E2; color: #B3261E; }
+    [data-theme="tuerkis"] .gesamt-abgelaufen { background: #FCE9E7; color: #B3261E; }
     [data-theme="tuerkis"] .gesamt-unvollstaendig { background: #F3EDEA; color: #6E4E45; }
+    [data-theme="tuerkis"] .kachel { background: #F0F5EC; color: #4F6B42; }
+    [data-theme="tuerkis"] .kachel:hover { box-shadow: inset 0 0 0 1.5px #167E79; }
+    [data-theme="tuerkis"] .kachel-bald-ablaufend { background: #FFF6DB; color: #7A4F00; }
+    [data-theme="tuerkis"] .kachel-abgelaufen { background: #FCE9E7; color: #B3261E; }
+    [data-theme="tuerkis"] .kachel-keine-angabe { background: #FFFFFF; color: #7A6058; box-shadow: inset 0 0 0 1px #E0D6D2; }
+    [data-theme="tuerkis"] .nachfrage { border-top-color: #EFEFEF; color: #6B6880; }
+    [data-theme="tuerkis"] .hund-bemerkung { color: #6B6880; }
     [data-theme="tuerkis"] .impf { background: #F4F4F4; }
     [data-theme="tuerkis"] .impf dt { color: #4E4B66; }
     [data-theme="tuerkis"] .impf dd { color: #4F6B42; }
@@ -84,7 +108,7 @@
     [data-theme="tuerkis"] .impf-abgelaufen { background: #FCE4E2; }
     [data-theme="tuerkis"] .impf-abgelaufen dt, [data-theme="tuerkis"] .impf-abgelaufen dd { color: #B3261E; }
     [data-theme="tuerkis"] .impf-keine-angabe dd { color: #6E4E45; }
-    [data-theme="tuerkis"] .haft-zeile { background: #EEF3EA; color: #4F6B42; }
+    [data-theme="tuerkis"] .haft-zeile { background: #F0F5EC; color: #4F6B42; font-weight: 500; }
     [data-theme="tuerkis"] .haft-bald,
     [data-theme="tuerkis"] .haft-ohne-nachweis { background: #FFF6DB; color: #7A4F00; }
     [data-theme="tuerkis"] .haft-abgelaufen,
