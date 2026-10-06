@@ -1143,6 +1143,12 @@ class WhatsAppOberflaecheTests(unittest.TestCase):
         self.assertIn('Einstellungen gespeichert', einstellen(kontaktdaten_name='Erika Beispiel',
                                                               kontaktdaten_mobil='0151 2345678'))
 
+        # Der Dialog zeigt, wie die Anfrage ankommt - mit dem Vornamen des Ansprechpartners
+        seite = self.oeffne('/').decode('utf-8')
+        self.assertIn('Hallo <span data-kontakt="vorname">Erika</span>,', seite)
+        self.assertIn('<span data-kontakt="mobil">0151 2345678</span>', seite)
+        self.assertRegex(seite, r'class="einst-hinweis" data-kontakt="hinweis"\s+hidden')
+
         seite = self.oeffne('/').decode('utf-8')
         self.assertNotIn('erst Ansprechpartner eintragen', seite)
         self.assertIn('Kontaktdaten bei Erika anfragen', seite)
@@ -1343,6 +1349,9 @@ class FotoeinwilligungTests(unittest.TestCase):
         seite = self.oeffne('/').decode('utf-8')
         self.assertIn('id="einstellungen-dialog"', seite)  # Dialog auf jeder Seite
         self.assertIn(f'value="{self.STANDARD_LINK}"', seite)
+        # Dokument-Karte: Dateiname statt langer Adresse, Eingabefeld erst auf Klick
+        self.assertIn('Einwilligung_Fotoaufnahmen_wolf.pdf</strong>', seite)
+        self.assertIn('<details class="link-aendern">', seite)
 
         # Unsinn wird abgelehnt, nichts gespeichert
         seite = self.einstellen(fotoeinwilligung_link='kein link')
@@ -1383,7 +1392,7 @@ class ThemeTests(unittest.TestCase):
     def test_theme_waehlen(self):
         seite = self.oeffne('/').decode('utf-8')
         self.assertIn('data-theme="tuerkis"', seite)
-        self.assertIn('<option value="tuerkis" selected>Türkis</option>', seite)
+        self.assertRegex(seite, r'<input type="radio" name="theme" value="tuerkis" id="einstellung-theme-tuerkis"\s+checked>')
         self.assertIsNone(self.gespeichert())  # Standard wird nicht gespeichert
 
         self.assertIn('Einstellungen gespeichert', self.einstellen(theme='gruen'))

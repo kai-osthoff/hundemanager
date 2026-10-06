@@ -885,6 +885,63 @@
         .einstellungen-dialog h2 { margin-bottom: 18px; }
         .einstellungen-dialog input[type=url], .einstellungen-dialog input[type=text], .einstellungen-dialog input[type=tel] { width: 100%; }
         .dialog-aktionen { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; margin-top: 20px; }
+
+        /* Einstellungen: Kopf in Schemafarbe, Abschnitte mit Symbol, Fuß mit Aktionen */
+        .einst-dialog { padding: 0; width: min(720px, calc(100% - 32px)); }
+        .einst-kopf { background: #173B2C; color: #FFFFFF; padding: 22px 28px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+        .einstellungen-dialog .einst-kopf h2 { margin: 0; font-size: 1.5rem; color: #FFFFFF; }
+        .einst-kopf p { font-size: 0.9rem; color: rgba(255, 255, 255, 0.85); }
+        .einst-schliessen { width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255, 255, 255, 0.6); border-radius: 10px; background: transparent; color: #FFFFFF; cursor: pointer; }
+        .einst-schliessen:hover { background: rgba(255, 255, 255, 0.12); }
+        .einst-dialog .einst-form { padding: 4px 28px 0; }
+        .einst-abschnitt { padding: 20px 0; border-bottom: 1px solid #E3E8E4; display: flex; flex-direction: column; gap: 12px; }
+        .einst-abschnitt:last-of-type { border-bottom: 0; }
+        .einst-abschnitt h3 { display: flex; align-items: center; gap: 10px; font-size: 1.05rem; font-weight: 600; }
+        .einst-abschnitt h3 svg { color: #173B2C; flex: none; }
+        .einst-abschnitt p { font-size: 0.92rem; color: #3F4A44; }
+        .einst-abschnitt small { font-size: 0.85rem; color: #55625A; }
+        .einst-abschnitt .form-group { margin-bottom: 0; }
+        .einst-marke { font-size: 0.75rem; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: #E1EBE3; color: #173B2C; }
+        .theme-karten { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+        .theme-karte { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid #CFD8D2; border-radius: 12px; cursor: pointer; background: #FFFFFF; }
+        .theme-karte:hover { border-color: #15201A; }
+        .theme-karte:has(input:checked) { border-color: #173B2C; box-shadow: inset 0 0 0 2px #173B2C; }
+        .theme-karte:has(input:focus-visible) { outline: 2px solid #00A3A3; outline-offset: 2px; }
+        .theme-karte input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+        .theme-vorschau { height: 84px; display: flex; flex-direction: column; background: #F4F4F4; border-radius: 6px; overflow: hidden; }
+        .theme-vorschau-kopf { height: 24px; border-bottom: 4px solid; }
+        .theme-vorschau-flaeche { flex: 1; padding: 9px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+        .theme-vorschau-flaeche span { background: #FFFFFF; border-radius: 4px; }
+        .theme-vorschau-flaeche span:last-child { align-self: end; height: 16px; }
+        .theme-name { font-weight: 600; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .theme-name::after { content: ""; width: 22px; height: 22px; flex: none; border-radius: 50%; border: 2px solid #B8C2BB; box-sizing: border-box; }
+        .theme-karte:has(input:checked) .theme-name::after { border: 0; background: #173B2C url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12l5 5 9-10'/%3E%3C/svg%3E") center / 14px no-repeat; }
+        .theme-name .einst-marke { margin-right: auto; }
+        .dokument-karte { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 12px 14px; border: 1px solid #D3E2DA; border-radius: 12px; background: #F7FAF8; }
+        .dokument-symbol { width: 42px; height: 50px; flex: none; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 6px; border: 1px solid #D3E2DA; border-radius: 4px; background: #FFFFFF; font-size: 0.7rem; font-weight: 700; color: #B3261E; letter-spacing: 0.04em; }
+        .dokument-text { flex: 1 1 240px; min-width: 0; display: flex; flex-direction: column; font-size: 0.85rem; color: #55625A; }
+        .dokument-text strong { font-size: 0.95rem; color: #15201A; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .dokument-knoepfe { display: flex; gap: 8px; }
+        .link-aendern summary { list-style: none; cursor: pointer; width: fit-content; }
+        .link-aendern summary::-webkit-details-marker { display: none; }
+        .link-aendern[open] summary { display: none; }
+        .einst-zweispaltig { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+        .whatsapp-vorschau { background: #EFEAE2; border-radius: 12px; padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 8px; }
+        .whatsapp-vorschau[hidden], .einst-hinweis[hidden] { display: none; }
+        .whatsapp-vorschau-kopf { display: flex; justify-content: space-between; gap: 8px; font-size: 0.78rem; color: #55625A; }
+        .whatsapp-vorschau-kopf > span:first-child { font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+        .whatsapp-blase { align-self: flex-end; max-width: 88%; background: #D9FDD3; border-radius: 10px 0 10px 10px; padding: 10px 12px; font-size: 0.9rem; line-height: 1.45; color: #111B21; white-space: pre-line; box-shadow: 0 1px 1px rgba(0, 0, 0, 0.08); }
+        .einst-hinweis { border: 1px dashed #E0A100; background: #FFF8E6; border-radius: 10px; padding: 12px 14px; font-size: 0.9rem; color: #5A3B00; }
+        .einst-fuss { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 16px 0 24px; border-top: 1px solid #E3E8E4; }
+        .einst-dialog .einst-fuss { margin: 0 -28px; padding: 16px 28px; background: #FAFBFA; }
+        .einst-fuss-rechts { display: flex; gap: 10px; }
+        .einst-fuss .btn-secondary { background: #FFFFFF; color: #15201A; box-shadow: inset 0 0 0 1px #B8C2BB; }
+        .einst-fuss .btn-secondary:hover { background: #EEF3EC; }
+        .einst-zuruecksetzen { min-height: 44px; display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; color: #55625A; font: inherit; font-size: 0.9rem; text-decoration: underline; cursor: pointer; }
+        .einst-zuruecksetzen:hover { color: #15201A; }
+        @media (max-width: 560px) {
+            .theme-karten, .einst-zweispaltig { grid-template-columns: minmax(0, 1fr); }
+        }
     </style>
     {% include '_theme_tuerkis.html' %}
 </head>
@@ -949,8 +1006,16 @@
     </div>
 
     {% if request.endpoint != 'einstellungen' %}
-    <dialog id="einstellungen-dialog" class="einstellungen-dialog" aria-labelledby="einstellungen-titel">
-        <h2 id="einstellungen-titel">Einstellungen</h2>
+    <dialog id="einstellungen-dialog" class="einstellungen-dialog einst-dialog" aria-labelledby="einstellungen-titel">
+        <div class="einst-kopf">
+            <div>
+                <h2 id="einstellungen-titel">Einstellungen</h2>
+                <p>Gelten für den ganzen Hundemanager. Deine Daten ändern sich dadurch nicht.</p>
+            </div>
+            <button type="button" class="einst-schliessen" aria-label="Schließen" onclick="this.closest('dialog').close();">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </button>
+        </div>
         {% with werte = einstellungen_werte, zurueck = request.full_path.rstrip('?') %}
             {% include '_einstellungen_formular.html' %}
         {% endwith %}
@@ -991,6 +1056,31 @@
            onclick="var d = document.getElementById('mail-hilfe'); if (d && d.showModal) { d.showModal(); return false; }">Hilfe: E-Mail</a>
     </footer>
     <script>
+        // Einstellungen: Farbschema und WhatsApp-Vorschau live zeigen. Schließen ohne Speichern
+        // setzt Formular und Farbschema zurück.
+        document.querySelectorAll('.einst-form').forEach(function (form) {
+            var html = document.documentElement, theme = html.getAttribute('data-theme');
+            var feld = function (n) { return form.querySelector('[name="' + n + '"]'); };
+            var teil = function (n) { return form.querySelector('[data-kontakt="' + n + '"]'); };
+            function aktualisieren() {
+                var auswahl = form.querySelector('[name="theme"]:checked');
+                if (auswahl) html.setAttribute('data-theme', auswahl.value);
+                var name = feld('kontaktdaten_name').value.trim(), mobil = feld('kontaktdaten_mobil').value.trim();
+                teil('vorname').textContent = name.split(/\s+/)[0];
+                teil('mobil').textContent = mobil;
+                teil('vorschau').hidden = !(name && mobil);
+                teil('hinweis').hidden = !!(name && mobil);
+            }
+            form.addEventListener('input', aktualisieren);
+            form.addEventListener('change', aktualisieren);
+            var dialog = form.closest('dialog');
+            if (dialog) dialog.addEventListener('close', function () {
+                form.reset();
+                aktualisieren();
+                html.setAttribute('data-theme', theme);
+            });
+        });
+
         // Geklickte E-Mail-Links zählen - nach ein paar Klicks blendet die App die GMX-Hilfe aus.
         // Fester Pfad statt url_for - ältere Versionen rendern diese Vorlage beim Update mit.
         document.addEventListener('click', function (ereignis) {

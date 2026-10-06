@@ -12,6 +12,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.parse
 import traceback
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -289,6 +290,9 @@ EINSTELLUNGEN = {
         'standard': 'tuerkis',
         'art': 'auswahl',
         'optionen': {'tuerkis': 'Türkis', 'gruen': 'Grün (bisher)'},
+        # Farben der kleinen Vorschau-Karte im Einstellungsdialog
+        'vorschau': {'tuerkis': {'kopf': '#1A928C', 'streifen': '#00CDCD', 'knopf': '#212121'},
+                     'gruen': {'kopf': '#173B2C', 'streifen': '#173B2C', 'knopf': '#173B2C'}},
     },
 }
 
@@ -1084,6 +1088,18 @@ def _einstellung_pruefen(schluessel, wert):
     return None
 
 
+@app.template_filter('link_anzeige')
+def link_anzeige(link):
+    """Dateiname, Domain und Art für die Dokument-Karte im Einstellungsdialog - None ohne gültigen Link."""
+    if not link or _einstellung_pruefen('fotoeinwilligung_link', link):
+        return None
+    teile = urllib.parse.urlsplit(link)
+    name = urllib.parse.unquote(teile.path.rstrip('/').rsplit('/', 1)[-1])
+    domain = teile.netloc[4:] if teile.netloc.startswith('www.') else teile.netloc
+    return {'name': name or domain, 'domain': domain,
+            'art': 'PDF' if name.lower().endswith('.pdf') else 'Link'}
+
+
 @app.route('/einstellungen', methods=['GET', 'POST'])
 def einstellungen():
     if request.method == 'POST':
@@ -1312,11 +1328,18 @@ def update_kontext():
     }
 
 
+KONTAKTDATEN_VORNAME_MARKE = '\x00vorname\x00'
+
+
 @app.context_processor
 def einstellungen_kontext():
     # Für den Einstellungsdialog im Kopf jeder Seite
     return {'einstellungen_info': EINSTELLUNGEN,
-            'einstellungen_werte': {s: einstellung(s) for s in EINSTELLUNGEN}}
+            'einstellungen_werte': {s: einstellung(s) for s in EINSTELLUNGEN},
+            # Beispiel der Anfrage an den Ansprechpartner - der Vorname wird im Dialog live eingesetzt
+            'kontaktdaten_beispiel': whatsapp.kontaktdaten_nachricht(
+                KONTAKTDATEN_VORNAME_MARKE, 'Max Mustermann', ['Bello']),
+            'kontaktdaten_vorname_marke': KONTAKTDATEN_VORNAME_MARKE}
 
 
 @app.context_processor

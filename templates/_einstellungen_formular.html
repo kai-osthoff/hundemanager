@@ -1,32 +1,113 @@
-{# Formular für Einstellungsdialog und Einstellungsseite. Erwartet: werte, einstellungen_info, zurueck #}
-<form method="POST" action="{{ url_for('einstellungen') }}">
+{# Formular für Einstellungsdialog und Einstellungsseite. Erwartet: werte, einstellungen_info, zurueck
+   Gegliedert in Abschnitte: Aussehen (Karten mit Vorschau), Formular Fotoeinwilligung (Dokument-Karte),
+   Ansprechpartner für Kontaktdaten (mit Vorschau der WhatsApp-Anfrage). Live-Vorschau: Skript in base.html. #}
+{% set theme = einstellungen_info.theme %}
+{% set link_info = einstellungen_info.fotoeinwilligung_link %}
+{% set link = werte.fotoeinwilligung_link or link_info.standard %}
+{% set anzeige = link | link_anzeige %}
+{% set name = werte.kontaktdaten_name or '' %}
+{% set mobil = werte.kontaktdaten_mobil or '' %}
+<form method="POST" action="{{ url_for('einstellungen') }}" class="einst-form">
     <input type="hidden" name="zurueck" value="{{ zurueck or '' }}">
-    {% for schluessel, info in einstellungen_info.items() %}
-    <div class="form-group">
-        <label for="einstellung-{{ schluessel }}">{{ info.name }}</label>
-        {% if info.art == 'auswahl' %}
-        <select id="einstellung-{{ schluessel }}" name="{{ schluessel }}">
-            {% for wert, text in info.optionen.items() %}
-            <option value="{{ wert }}"{% if wert == (werte[schluessel] or info.standard) %} selected{% endif %}>{{ text }}</option>
+
+    <section class="einst-abschnitt">
+        <h3>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1.2"/><circle cx="12" cy="7.5" r="1.2"/><circle cx="15.5" cy="10" r="1.2"/><path d="M12 21a2.5 2.5 0 0 1 0-5h1.5a2.5 2.5 0 0 0 2.5-2.5"/></svg>
+            Aussehen
+        </h3>
+        <div class="theme-karten" role="radiogroup" aria-label="{{ theme.name }}">
+            {% for wert, text in theme.optionen.items() %}
+            {% set farben = theme.vorschau[wert] %}
+            <label class="theme-karte">
+                <input type="radio" name="theme" value="{{ wert }}" id="einstellung-theme-{{ wert }}"
+                       {% if wert == (werte.theme or theme.standard) %}checked{% endif %}>
+                <span class="theme-vorschau" aria-hidden="true">
+                    <span class="theme-vorschau-kopf" style="background: {{ farben.kopf }}; border-bottom-color: {{ farben.streifen }};"></span>
+                    <span class="theme-vorschau-flaeche">
+                        <span></span><span></span><span style="background: {{ farben.knopf }};"></span>
+                    </span>
+                </span>
+                <span class="theme-name">{{ text }}{% if wert == theme.standard %} <span class="einst-marke">Standard</span>{% endif %}</span>
+            </label>
             {% endfor %}
-        </select>
-        <small>{{ info.hilfe }}</small>
-        {% else %}
-        <input type="{{ info.art }}" id="einstellung-{{ schluessel }}" name="{{ schluessel }}"
-               value="{{ werte[schluessel] or '' }}" placeholder="{{ info.platzhalter or info.standard }}" autocomplete="off">
-        <small>{{ info.hilfe }}
-            {% if info.art == 'url' and werte[schluessel] %}<a href="{{ werte[schluessel] }}" target="_blank" rel="noopener">Link prüfen ↗</a>{% endif %}</small>
+        </div>
+        <small>{{ theme.hilfe }} Wirkt sofort als Vorschau – erst mit „Speichern“ bleibt es so.</small>
+    </section>
+
+    <section class="einst-abschnitt">
+        <h3>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="1"/><circle cx="12" cy="12.5" r="3.5"/><path d="M8 6l1.5-2h5L16 6"/></svg>
+            Formular für die Fotoeinwilligung
+        </h3>
+        <p>{{ link_info.hilfe }}</p>
+        {% if anzeige %}
+        <div class="dokument-karte">
+            <span class="dokument-symbol" aria-hidden="true">{{ anzeige.art }}</span>
+            <span class="dokument-text">
+                <strong title="{{ link }}">{{ anzeige.name }}</strong>
+                <span>{{ anzeige.domain }}{% if link == link_info.standard %} · <span class="einst-marke">Standard</span>{% endif %}</span>
+            </span>
+            <span class="dokument-knoepfe">
+                <a href="{{ link }}" target="_blank" rel="noopener" class="knopf">Ansehen ↗</a>
+            </span>
+        </div>
         {% endif %}
-    </div>
-    {% endfor %}
-    <div class="dialog-aktionen">
-        <button type="submit" name="standard" value="1" class="btn btn-secondary"
-                onclick="return confirm('Alle Einstellungen auf den Standard zurücksetzen?');">Standard wiederherstellen</button>
-        {% if zurueck %}
-        <button type="button" class="btn btn-secondary" onclick="this.closest('dialog').close();">Abbrechen</button>
-        {% else %}
-        <a href="{{ url_for('index') }}" class="btn btn-secondary">Abbrechen</a>
-        {% endif %}
-        <button type="submit" class="btn btn-primary">Speichern</button>
+        <details class="link-aendern"{% if not anzeige %} open{% endif %}>
+            <summary class="knopf">Anderen Link eintragen</summary>
+            <div class="form-group">
+                <label for="einstellung-fotoeinwilligung_link">Link zum Formular (beginnt mit https://)</label>
+                <input type="url" id="einstellung-fotoeinwilligung_link" name="fotoeinwilligung_link"
+                       value="{{ werte.fotoeinwilligung_link or '' }}" placeholder="{{ link_info.standard }}" autocomplete="off">
+                <small>Ändert der Verein das Formular, hier den neuen Link eintragen. Leer = Standard.</small>
+            </div>
+        </details>
+    </section>
+
+    <section class="einst-abschnitt">
+        <h3>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M17 8.5h4M19 6.5v4"/></svg>
+            Wer hat die Kontaktdaten?
+        </h3>
+        <p>Fehlen bei einem Halter Handynummer <strong>und</strong> E-Mail, fragst du per Knopfdruck bei dieser Person im Vorstand nach.</p>
+        <div class="einst-zweispaltig">
+            <div class="form-group">
+                <label for="einstellung-kontaktdaten_name">Vor- und Nachname</label>
+                <input type="text" id="einstellung-kontaktdaten_name" name="kontaktdaten_name"
+                       value="{{ name }}" placeholder="z. B. Petra Beispiel" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label for="einstellung-kontaktdaten_mobil">Handynummer (WhatsApp)</label>
+                <input type="tel" id="einstellung-kontaktdaten_mobil" name="kontaktdaten_mobil"
+                       value="{{ mobil }}" placeholder="{{ einstellungen_info.kontaktdaten_mobil.platzhalter }}" autocomplete="off">
+            </div>
+        </div>
+        {% set teile = kontaktdaten_beispiel.split(kontaktdaten_vorname_marke) %}
+        <div class="whatsapp-vorschau" data-kontakt="vorschau"{% if not (name and mobil) %} hidden{% endif %}>
+            <div class="whatsapp-vorschau-kopf">
+                <span>So kommt die Anfrage an</span>
+                <span>an <span data-kontakt="mobil">{{ mobil }}</span></span>
+            </div>
+            <div class="whatsapp-blase">{{ teile[0] }}<span data-kontakt="vorname">{{ name.split()[0] if name.split() else '' }}</span>{{ teile[1:] | join('') }}</div>
+        </div>
+        <div class="einst-hinweis" data-kontakt="hinweis"{% if name and mobil %} hidden{% endif %}>
+            Name und Handynummer gehören zusammen. Erst wenn beides da ist, erscheint bei Haltern ohne
+            Kontaktdaten der Knopf „Kontaktdaten anfragen“.
+        </div>
+    </section>
+
+    <div class="einst-fuss">
+        <button type="submit" name="standard" value="1" class="einst-zuruecksetzen"
+                onclick="return confirm('Alle Einstellungen auf den Standard zurücksetzen?');">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/></svg>
+            Alles auf Standard
+        </button>
+        <div class="einst-fuss-rechts">
+            {% if zurueck %}
+            <button type="button" class="btn btn-secondary" onclick="this.closest('dialog').close();">Abbrechen</button>
+            {% else %}
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">Abbrechen</a>
+            {% endif %}
+            <button type="submit" class="btn btn-primary">Speichern</button>
+        </div>
     </div>
 </form>

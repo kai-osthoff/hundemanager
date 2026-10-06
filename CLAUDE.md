@@ -189,7 +189,11 @@ Programm passiert erst nach einer geprüften Sicherung.**
   wählbar „Grün (bisher)“. `base.html` setzt `<html data-theme="…">`; der Grundstil dort ist Grün,
   `_theme_tuerkis.html` legt Türkis per `[data-theme="tuerkis"]` darüber. Kein Tailwind/CDN:
   die App läuft offline, ohne Build-Schritt. Schrift Poppins nur, wenn installiert (sonst
-  Century Gothic/Segoe UI). Neues Schema = Eintrag in `optionen` + eigene Stil-Datei.
+  Century Gothic/Segoe UI). Neues Schema = Eintrag in `optionen` und `vorschau` + eigene Stil-Datei.
+- Einstellungsdialog (`_einstellungen_formular.html`) ist von Hand in Abschnitte gegliedert (Aussehen als
+  Karten mit Vorschau, Formular-Link als Dokument-Karte, Ansprechpartner mit Vorschau der WhatsApp-Anfrage) –
+  eine neue Einstellung braucht dort einen eigenen Abschnitt. Farbschema und WhatsApp-Vorschau wirken live
+  (Skript in base.html); Schließen ohne Speichern setzt Formular und Schema zurück.
 
 ## Releases
 
