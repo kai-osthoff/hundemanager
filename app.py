@@ -198,6 +198,8 @@ class Nachweis(db.Model):
     bemerkung = db.Column(db.Text, nullable=True)
     # Anzeige-Drehung der Datei in Grad (im Uhrzeigersinn) - die Datei selbst bleibt unverändert
     drehung = db.Column(db.Integer, nullable=True, default=0)
+    # Ecken der Seite im Foto (bilder.seite_finden) - Anzeige gerade gezogen, Datei unverändert
+    ecken = db.Column(db.String(100), nullable=True)
     # Wie gut war die automatische Erkennung? Nur je Feld übernommen/geändert, keine Inhalte (JSON)
     erkennung = db.Column(db.Text, nullable=True)
     # Weitere Fotos desselben Nachweises (z.B. mehrere Impfpass-Seiten); die erste Datei steht oben
@@ -208,9 +210,9 @@ class Nachweis(db.Model):
     def seiten(self):
         """Alle Dateien des Nachweises in Reihenfolge - die erste ist der Nachweis selbst."""
         erste = {'sha256': self.datei_sha256, 'endung': self.datei_endung,
-                 'original_name': self.original_name, 'drehung': self.drehung or 0}
+                 'original_name': self.original_name, 'drehung': self.drehung or 0, 'ecken': self.ecken or ''}
         return [erste] + [{'sha256': s.datei_sha256, 'endung': s.datei_endung,
-                           'original_name': s.original_name, 'drehung': s.drehung or 0}
+                           'original_name': s.original_name, 'drehung': s.drehung or 0, 'ecken': s.ecken or ''}
                           for s in self.weitere_seiten]
 
     @property
@@ -250,6 +252,7 @@ class NachweisSeite(db.Model):
     datei_endung = db.Column(db.String(4), nullable=False)
     original_name = db.Column(db.String(255), nullable=True)
     drehung = db.Column(db.Integer, nullable=True, default=0)
+    ecken = db.Column(db.String(100), nullable=True)
 
 
 class Fotoeinwilligung(db.Model):
@@ -800,7 +803,9 @@ def nachweis_hochladen(hund_id):
             erste_daten = daten
         # Quer oder auf dem Kopf fotografiert? Nur die Anzeige wird gedreht, nie die Datei
         drehung = 0 if endung == 'pdf' else bilder.ausrichtung_erkennen(daten)
-        seiten.append({'sha256': sha256, 'endung': endung, 'original_name': name, 'drehung': drehung})
+        ecken = None if endung == 'pdf' else bilder.seite_finden(daten)
+        seiten.append({'sha256': sha256, 'endung': endung, 'original_name': name, 'drehung': drehung,
+                       'ecken': ','.join(map(str, ecken)) if ecken else ''})
         if art == 'impfpass' and endung != 'pdf' and erkennung.verfuegbar():
             ergebnisse.append(erkennung.foto_auswerten(daten, drehung))
 
@@ -858,16 +863,24 @@ def _seiten_aus_formular():
     """Die hochgeladenen Dateien aus den versteckten Feldern des Dialogs - jede muss abgelegt sein."""
     namen = request.form.getlist('original_name')
     drehungen = request.form.getlist('drehung')
+    alle_ecken = request.form.getlist('ecken')
     seiten = []
     for i, (sha256, endung) in enumerate(zip(request.form.getlist('sha256'), request.form.getlist('endung'))):
         if not os.path.exists(nachweise.pfad(sha256, endung)):
             raise nachweise.NachweisFehler('Die hochgeladene Datei wurde nicht gefunden.')
         seiten.append({'sha256': sha256, 'endung': endung,
                        'original_name': (namen[i] if i < len(namen) else '')[:255] or None,
-                       'drehung': bilder.drehung_pruefen(drehungen[i] if i < len(drehungen) else 0)})
+                       'drehung': bilder.drehung_pruefen(drehungen[i] if i < len(drehungen) else 0),
+                       'ecken': _ecken_text(alle_ecken[i] if i < len(alle_ecken) else '')})
     if not seiten:
         raise nachweise.NachweisFehler('Die hochgeladene Datei wurde nicht gefunden.')
     return seiten
+
+
+def _ecken_text(wert):
+    """Ecken aus dem Formular - nur gültige, sonst leer (dann ganzes Foto)."""
+    ecken = bilder.ecken_pruefen(wert)
+    return ','.join(map(str, ecken)) if ecken else ''
 
 
 def _impf_angaben():
@@ -965,11 +978,11 @@ def nachweis_speichern(hund_id):
 
     erste = seiten[0]
     nachweis = Nachweis(hund_id=hund.id, art=art, datei_sha256=erste['sha256'], datei_endung=erste['endung'],
-                        original_name=erste['original_name'], drehung=erste['drehung'])
+                        original_name=erste['original_name'], drehung=erste['drehung'], ecken=erste['ecken'] or None)
     for nr, seite in enumerate(seiten[1:], start=2):
         nachweis.weitere_seiten.append(NachweisSeite(
             nr=nr, datei_sha256=seite['sha256'], datei_endung=seite['endung'],
-            original_name=seite['original_name'], drehung=seite['drehung']))
+            original_name=seite['original_name'], drehung=seite['drehung'], ecken=seite['ecken'] or None))
     fehler = _nachweis_angaben(nachweis)
     erk = _erkennung_aus_formular()
     if fehler:
@@ -1000,11 +1013,14 @@ def nachweis_bearbeiten(nachweis_id):
             db.session.rollback()
             flash(fehler, 'error')
             seiten = nachweis.seiten
-            for seite, wert in zip(seiten, request.form.getlist('drehung')):
+            for seite, wert, ecken in zip(seiten, request.form.getlist('drehung'), request.form.getlist('ecken')):
                 seite['drehung'] = bilder.drehung_pruefen(wert)
+                seite['ecken'] = _ecken_text(ecken)
             return _angaben_seite(nachweis.hund, nachweis, nachweis.art, _formular_vorschlag(), seiten)
         for teil, wert in zip([nachweis] + list(nachweis.weitere_seiten), request.form.getlist('drehung')):
             teil.drehung = bilder.drehung_pruefen(wert)
+        for teil, ecken in zip([nachweis] + list(nachweis.weitere_seiten), request.form.getlist('ecken')):
+            teil.ecken = _ecken_text(ecken) or None  # "Ganzes Foto" gewählt -> kein Zuschnitt
         meldung = ''
         if NACHWEIS_ARTEN[nachweis.art]['impfungen']:
             meldung = _impf_meldung(*impfungen_uebernehmen(nachweis.hund, nachweis.impf_daten, vorher))
@@ -1066,7 +1082,7 @@ def nachweis_bild(sha256, endung):
     if endung != 'pdf' and os.path.exists(datei_pfad):
         with open(datei_pfad, 'rb') as f:
             ergebnis = bilder.ansicht(f.read(), request.args.get('drehung', 0),
-                                      ausschnitt=request.args.get('ausschnitt'))
+                                      ausschnitt=request.args.get('ausschnitt'), ecken=request.args.get('ecken'))
         if ergebnis:
             antwort = send_file(io.BytesIO(ergebnis[0]), mimetype=ergebnis[1])
             # Inhalt und Drehung stecken in der Adresse - der Browser darf sich das Bild merken

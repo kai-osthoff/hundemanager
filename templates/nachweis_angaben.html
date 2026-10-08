@@ -78,6 +78,7 @@
                     <input type="hidden" name="endung" value="{{ seite.endung }}">
                     <input type="hidden" name="original_name" value="{{ seite.original_name or '' }}">
                     <input type="hidden" name="drehung" value="{{ seite.drehung }}">
+                    <input type="hidden" name="ecken" value="{{ seite.ecken or '' }}" data-erkannt="{{ seite.ecken or '' }}">
                     <figcaption class="seite-kopf">
                         <strong>{% if seiten|length > 1 %}Seite {{ loop.index }} von {{ seiten|length }}{% else %}Dokument{% endif %}</strong>
                         <span>{{ seite.original_name or '' }}</span>
@@ -86,6 +87,9 @@
                             {% if seite.endung != 'pdf' %}
                             <button type="button" class="knopf" data-drehen="-90" title="Nach links drehen" aria-label="Seite {{ loop.index }} nach links drehen">↺</button>
                             <button type="button" class="knopf" data-drehen="90" title="Nach rechts drehen" aria-label="Seite {{ loop.index }} nach rechts drehen">↻</button>
+                            {% if seite.ecken %}
+                            <button type="button" class="knopf" data-zuschnitt title="Zwischen gerade gezogener Seite und ganzem Foto wechseln">Ganzes Foto</button>
+                            {% endif %}
                             {% endif %}
                             <a href="{{ datei_url }}" target="_blank" class="knopf">Original</a>
                         </span>
@@ -94,7 +98,7 @@
                         <iframe class="pdf-vorschau" src="{{ datei_url }}" title="Dokument {{ loop.index }}"></iframe>
                     {% else %}
                         <div class="bild-rahmen" title="Klicken zum Vergrößern">
-                            <img src="{{ url_for('nachweis_bild', sha256=seite.sha256, endung=seite.endung, drehung=seite.drehung) }}"
+                            <img src="{{ url_for('nachweis_bild', sha256=seite.sha256, endung=seite.endung, drehung=seite.drehung, ecken=seite.ecken or None) }}"
                                  data-basis="{{ url_for('nachweis_bild', sha256=seite.sha256, endung=seite.endung) }}"
                                  alt="Seite {{ loop.index }} des Nachweises">
                         </div>
@@ -253,8 +257,23 @@
             var feld = seite.querySelector('input[name=drehung]');
             var neu = (((parseInt(feld.value, 10) || 0) + parseInt(knopf.dataset.drehen, 10)) % 360 + 360) % 360;
             feld.value = neu;
-            var bild = seite.querySelector('img');
-            if (bild) bild.src = bild.dataset.basis + '?drehung=' + neu;
+            bildNeu(seite);
+        });
+    });
+    function bildNeu(seite) {
+        var bild = seite.querySelector('.bild-rahmen img');
+        var ecken = seite.querySelector('input[name=ecken]').value;
+        if (bild) bild.src = bild.dataset.basis + '?drehung=' + seite.querySelector('input[name=drehung]').value
+                             + (ecken ? '&ecken=' + ecken : '');
+    }
+    // Zuschnitt: gerade gezogene Seite oder ganzes Foto (wird mitgespeichert, die Datei bleibt unverändert)
+    document.querySelectorAll('[data-zuschnitt]').forEach(function (knopf) {
+        knopf.addEventListener('click', function () {
+            var seite = knopf.closest('.seite');
+            var feld = seite.querySelector('input[name=ecken]');
+            feld.value = feld.value ? '' : feld.dataset.erkannt;
+            knopf.textContent = feld.value ? 'Ganzes Foto' : 'Zuschneiden';
+            bildNeu(seite);
         });
     });
     // Vergrößern zum Lesen der Handschrift

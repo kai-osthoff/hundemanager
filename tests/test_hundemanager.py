@@ -242,6 +242,20 @@ def passfoto():
     return puffer.getvalue()
 
 
+def tischfoto():
+    """Erfundene helle Passseite, schräg fotografiert auf dunklem Holztisch (1200x1600)."""
+    from PIL import Image, ImageDraw, ImageFont
+    bild = Image.new('RGB', (1200, 1600), (120, 72, 40))
+    stift, schrift = ImageDraw.Draw(bild), ImageFont.load_default(size=36)
+    ecken = [(220, 180), (1010, 240), (960, 1420), (160, 1340)]  # oben links, oben rechts, unten rechts, unten links
+    stift.polygon(ecken, fill=(232, 236, 248))
+    for i in range(10):
+        stift.text((300, 300 + i * 100), 'Impfdatum 13.12.2025', fill=(30, 30, 90), font=schrift)
+    puffer = io.BytesIO()
+    bild.save(puffer, 'JPEG', quality=90)
+    return puffer.getvalue(), [(x / 1200, y / 1600) for x, y in ecken]
+
+
 def textfoto(art='block', drehung=0, format='JPEG', exif_ausrichtung=None):
     """Foto einer erfundenen Impfpass-Seite, um drehung Grad im Uhrzeigersinn verdreht aufgenommen."""
     from PIL import Image, ImageDraw, ImageFont
@@ -1951,6 +1965,36 @@ class BilderTests(unittest.TestCase):
         for wert, erwartet in (('90', 90), ('-90', 270), (450, 90), ('45', 0), ('x', 0), (None, 0)):
             self.assertEqual(self.bilder.drehung_pruefen(wert), erwartet)
 
+    @unittest.skipUnless(importlib.util.find_spec('cv2'), 'OpenCV ist nicht installiert')
+    def test_seite_wird_gefunden_und_gerade_gezogen(self):
+        from PIL import Image
+        foto, erwartet = tischfoto()
+        ecken = self.bilder.seite_finden(foto)
+        self.assertEqual(len(ecken), 8)
+        for (x, y), (ex, ey) in zip(zip(ecken[::2], ecken[1::2]), erwartet):
+            self.assertAlmostEqual(x, ex, delta=0.03)
+            self.assertAlmostEqual(y, ey, delta=0.03)
+        text = ','.join(map(str, ecken))
+        self.assertEqual(self.bilder.ecken_pruefen(text), ecken)
+        # Gerade gezogen: Hochformat, und in den Ecken liegt die Seite, nicht der Tisch
+        daten, _ = self.bilder.ansicht(foto, 0, ecken=text)
+        bild = Image.open(io.BytesIO(daten)).convert('RGB')
+        self.assertGreater(bild.size[1], bild.size[0])
+        for punkt in ((8, 8), (bild.size[0] - 9, 8), (8, bild.size[1] - 9), (bild.size[0] - 9, bild.size[1] - 9)):
+            r, g, b = bild.getpixel(punkt)
+            self.assertGreater(b, 180, punkt)
+        # Gedreht wird nach dem Geradeziehen
+        daten, _ = self.bilder.ansicht(foto, 90, ecken=text)
+        self.assertGreater(*Image.open(io.BytesIO(daten)).size)
+
+    def test_ohne_erkennbare_seite_kein_zuschnitt(self):
+        self.assertIsNone(self.bilder.seite_finden(textfoto()))  # das Foto ist schon nur die Seite
+        self.assertIsNone(self.bilder.seite_finden(test_pdf(['Kein Foto'])))
+        for kaputt in ('', 'x', '0.1,0.2', '0.1,0.2,0.3,0.4,0.5,0.6,0.7,1.8', None):
+            self.assertIsNone(self.bilder.ecken_pruefen(kaputt))
+        # Kaputte Ecken: einfach das ganze Foto
+        self.assertIsNotNone(self.bilder.ansicht(textfoto(), 0, ecken='Unsinn'))
+
 
 class ImpfpassOberflaecheTests(unittest.TestCase):
     """Impfpass-Fotos hochladen, Fälligkeiten eintragen, WhatsApp-Nachfrage bei Ablauf."""
@@ -1962,6 +2006,28 @@ class ImpfpassOberflaecheTests(unittest.TestCase):
     def hund(self, *spalten):
         with closing(sqlite3.connect(self.db)) as v:
             return v.execute(f'SELECT {", ".join(spalten)} FROM hund WHERE id = 1').fetchone()
+
+    @unittest.skipUnless(importlib.util.find_spec('cv2'), 'OpenCV ist nicht installiert')
+    def test_seite_wird_zugeschnitten_original_bleibt(self):
+        foto, _ = tischfoto()
+        koerper, typ = multipart_mehrere([('art', 'impfpass')], [('datei', 'tisch.jpg', foto)])
+        dialog = self.oeffne('/hund/1/nachweise/hochladen', koerper, typ).decode('utf-8')
+        ecken = re.search(r'name="ecken" value="([0-9.,]+)"', dialog).group(1)
+        self.assertRegex(dialog, r'<img src="/nachweis/bild/[^"]*ecken=0')
+        self.assertIn('Ganzes Foto', dialog)
+        formular = [('art', 'impfpass'), ('ecken', ecken)]
+        for name in ('sha256', 'endung', 'original_name', 'drehung'):
+            formular.append((name, re.search(rf'name="{name}" value="([^"]*)"', dialog).group(1)))
+        self.oeffne('/hund/1/nachweise/speichern', urllib.parse.urlencode(formular).encode())
+        with closing(sqlite3.connect(self.db)) as v:
+            self.assertEqual(v.execute('SELECT ecken FROM nachweis').fetchone(), (ecken,))
+        self.assertIn('ecken=', self.oeffne('/nachweis/1/ansehen').decode('utf-8'))
+        self.assertEqual(self.oeffne('/nachweis/1/datei'), foto)  # die Datei selbst ist unverändert
+        # "Ganzes Foto" gewählt -> kein Zuschnitt mehr
+        formular = [('drehung', '0'), ('ecken', '')]
+        self.oeffne('/nachweis/1/bearbeiten', urllib.parse.urlencode(formular).encode())
+        with closing(sqlite3.connect(self.db)) as v:
+            self.assertEqual(v.execute('SELECT ecken FROM nachweis').fetchone(), (None,))
 
     def test_fotos_hochladen_impfungen_eintragen_und_nachfragen(self):
         from PIL import Image

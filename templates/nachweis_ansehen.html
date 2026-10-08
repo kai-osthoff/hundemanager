@@ -45,8 +45,8 @@
         {% if seite.endung == 'pdf' %}
             <iframe src="{{ datei_url }}" title="Dokument {{ loop.index }}"></iframe>
         {% else %}
-            <a href="{{ url_for('nachweis_bild', sha256=seite.sha256, endung=seite.endung, drehung=seite.drehung) }}" target="_blank" title="In voller Größe öffnen">
-                <img src="{{ url_for('nachweis_bild', sha256=seite.sha256, endung=seite.endung, drehung=seite.drehung) }}" alt="Seite {{ loop.index }}">
+            <a href="{{ url_for('nachweis_bild', sha256=seite.sha256, endung=seite.endung, drehung=seite.drehung, ecken=seite.ecken or None) }}" target="_blank" title="In voller Größe öffnen">
+                <img src="{{ url_for('nachweis_bild', sha256=seite.sha256, endung=seite.endung, drehung=seite.drehung, ecken=seite.ecken or None) }}" alt="Seite {{ loop.index }}">
             </a>
         {% endif %}
     </figure>

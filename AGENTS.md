@@ -141,6 +141,9 @@ Programm passiert erst nach einer geprüften Sicherung.**
   (Zeilenprofil quer/hoch, Ober- vs. Unterlängen für oben/unten – ohne Texterkennung, nur
   Pillow) und liefert gedrehte Ansichten (`/nachweis/bild/<sha>.<endung>?drehung=`).
   Fehlt Pillow, läuft alles ohne Drehung weiter. Die Datei wird nie umgeschrieben.
+- **Zuschnitt nur in der Anzeige:** `bilder.seite_finden()` (OpenCV) sucht beim Hochladen die helle Passseite vor
+  Tisch/Teppich; ihre Ecken stehen als `ecken` am Nachweis bzw. an der Seite – im Foto **ohne** Drehung, gerade
+  gezogen wird vor dem Drehen. Im Dialog „Ganzes Foto“/„Zuschneiden“; „Original“ zeigt immer die unveränderte Datei.
 - **Impfpass:** Saskia liest die Daten von den Fotos ab und trägt je Impfung „gültig bis“ ein
   (`impf_gueltig` als JSON am Nachweis). Beim Speichern landen sie am Hund
   (`impfungen_uebernehmen`): ein späteres Datum gewinnt – ein altes Foto überschreibt keine

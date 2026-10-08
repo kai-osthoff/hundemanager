@@ -15,6 +15,12 @@
 #
 # Fehlt Pillow (z.B. Installation noch nicht nachgezogen), läuft alles weiter -
 # dann ohne automatische Drehung und mit dem Originalbild.
+#
+# Zuschnitt: seite_finden() sucht mit OpenCV die helle Passseite vor dunklerem, farbigem
+# Hintergrund (Tisch, Teppich) und liefert ihre vier Ecken. ansicht(ecken=...) zieht die
+# Seite perspektivisch gerade und schneidet den Rest weg - wieder nur in der Anzeige.
+# Die Ecken gelten im Foto OHNE Drehung, gedreht wird danach; so passt der Zuschnitt auch,
+# wenn Saskia das Foto im Dialog dreht. Ohne OpenCV: ganzes Foto, wie bisher.
 
 import io
 
@@ -36,6 +42,98 @@ if Image is not None:
 
 def verfuegbar():
     return Image is not None
+
+
+def _opencv():
+    try:
+        import cv2
+        import numpy
+        return cv2, numpy
+    except ImportError:
+        return None, None
+
+
+SEITE_MINDESTENS = 0.2    # so viel vom Foto muss die Seite einnehmen, sonst ist es keine
+SEITE_SCHON_ZUGESCHNITTEN = 0.02  # Ecken so nah an den Bildecken: nichts wegzuschneiden
+
+
+def ecken_pruefen(wert):
+    """'x1,y1,...,x4,y4' (Anteile, oben links, oben rechts, unten rechts, unten links) -> Liste oder None."""
+    try:
+        werte = [float(t) for t in (wert or '').split(',')]
+    except ValueError:
+        return None
+    if len(werte) != 8 or not all(0 <= v <= 1 for v in werte):
+        return None
+    return werte
+
+
+def _ecken_ordnen(punkte):
+    """Vier Punkte -> oben links, oben rechts, unten rechts, unten links."""
+    summe = sorted(punkte, key=lambda p: p[0] + p[1])
+    diff = sorted(punkte, key=lambda p: p[1] - p[0])
+    return [summe[0], diff[0], summe[-1], diff[-1]]
+
+
+def seite_finden(daten):
+    """Ecken der Passseite im Foto (ohne Drehung) als 8 Anteile - oder None (keine Seite zu
+    erkennen, schon zugeschnitten, kein Bild, kein OpenCV)."""
+    cv2, np = _opencv()
+    if cv2 is None or Image is None:
+        return None
+    try:
+        bild = _oeffnen(daten).convert('RGB')
+    except Exception:
+        return None
+    bild.thumbnail((800, 800))
+    breite, hoehe = bild.size
+    hsv = cv2.cvtColor(np.array(bild), cv2.COLOR_RGB2HSV)
+    # Passseiten sind hell und kaum farbig - Holz, Teppich und Hände sind dunkler oder bunter
+    hell = np.clip(hsv[..., 2].astype(np.int16) - 1.5 * hsv[..., 1].astype(np.int16), 0, 255).astype(np.uint8)
+    hell = cv2.GaussianBlur(hell, (7, 7), 0)
+    _, maske = cv2.threshold(hell, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    maske = cv2.morphologyEx(maske, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (25, 25)))
+    maske = cv2.morphologyEx(maske, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9)))
+    umrisse, _ = cv2.findContours(maske, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not umrisse:
+        return None
+    umriss = max(umrisse, key=cv2.contourArea)
+    if cv2.contourArea(umriss) < SEITE_MINDESTENS * breite * hoehe:
+        return None
+    huelle = cv2.convexHull(umriss)
+    umfang = cv2.arcLength(huelle, True)
+    for genauigkeit in (0.02, 0.03, 0.04, 0.06, 0.08):
+        viereck = cv2.approxPolyDP(huelle, genauigkeit * umfang, True)
+        if len(viereck) == 4:
+            break
+    else:
+        return None
+    ecken = _ecken_ordnen([(float(p[0][0]) / breite, float(p[0][1]) / hoehe) for p in viereck])
+    bildecken = [(0, 0), (1, 0), (1, 1), (0, 1)]
+    if all(abs(x - bx) < SEITE_SCHON_ZUGESCHNITTEN and abs(y - by) < SEITE_SCHON_ZUGESCHNITTEN
+           for (x, y), (bx, by) in zip(ecken, bildecken)):
+        return None
+    return [round(min(1.0, max(0.0, v)), 4) for punkt in ecken for v in punkt]
+
+
+def _gerade_ziehen(bild, ecken):
+    cv2, np = _opencv()
+    if cv2 is None:
+        return bild
+    b, h = bild.size
+    tl, tr, br, bl = [(ecken[i] * b, ecken[i + 1] * h) for i in range(0, 8, 2)]
+
+    def abstand(p, q):
+        return ((p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2) ** 0.5
+
+    breite = int(max(abstand(tl, tr), abstand(bl, br)))
+    hoehe = int(max(abstand(tl, bl), abstand(tr, br)))
+    if breite < 20 or hoehe < 20:
+        return bild
+    matrix = cv2.getPerspectiveTransform(np.float32([tl, tr, br, bl]),
+                                         np.float32([(0, 0), (breite - 1, 0), (breite - 1, hoehe - 1), (0, hoehe - 1)]))
+    gerade = cv2.warpPerspective(np.array(bild.convert('RGB')), matrix, (breite, hoehe), flags=cv2.INTER_LINEAR)
+    return Image.fromarray(gerade)
 
 
 def drehung_pruefen(wert):
@@ -160,13 +258,18 @@ def ausschnitt_pruefen(wert):
     return x, y, min(b, 1 - x), min(h, 1 - y)
 
 
-def ansicht(daten, drehung=0, kante=ANZEIGE_KANTE, ausschnitt=None):
+def ansicht(daten, drehung=0, kante=ANZEIGE_KANTE, ausschnitt=None, ecken=None):
     """Foto gedreht und verkleinert als JPEG - (bytes, mimetype). None, wenn es kein Bild ist.
-    ausschnitt: nur dieser Teil (siehe ausschnitt_pruefen), z. B. die Zeile, aus der ein Vorschlag stammt."""
+    ausschnitt: nur dieser Teil (siehe ausschnitt_pruefen), z. B. die Zeile, aus der ein Vorschlag stammt.
+    ecken: Seite gerade ziehen und zuschneiden (siehe seite_finden) - vor dem Drehen."""
     if Image is None:
         return None
     try:
-        bild = _drehen(_oeffnen(daten), drehung_pruefen(drehung))
+        bild = _oeffnen(daten)
+        ecken = ecken_pruefen(ecken) if isinstance(ecken, str) else ecken
+        if ecken:
+            bild = _gerade_ziehen(bild, ecken)
+        bild = _drehen(bild, drehung_pruefen(drehung))
     except Exception:
         return None
     if bild.mode not in ('RGB', 'L'):
