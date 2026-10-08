@@ -177,6 +177,21 @@ Programm passiert erst nach einer geprüften Sicherung.**
   geklickten E-Mail-Links; der Zähler steht als `mail_klicks` in der Tabelle `einstellung`
   (bewusst nicht in `EINSTELLUNGEN`). Datenschutz: echte Adressen nie in Tests.
 
+## Wiedervorlage je Hund
+
+- Eine Wiedervorlage gilt gemeinsam für die nachzufragenden Angaben des Hundes.
+  Nach dem Öffnen einer WhatsApp-/E-Mail-Anfrage wird sie nach dem abbrechbaren
+  Countdown mit der eingestellten Standardfrist gespeichert (Standard: 14 Tage).
+- Saskia kann den aktuellen Termin löschen oder ein eigenes Datum setzen/ändern.
+  Löschen schaltet spätere automatische Wiedervorlagen nicht ab. Öffnen des
+  Datumseditors oder Löschen beendet einen noch wartenden Countdown dieses Hundes.
+- Jeder zukünftige Termin nimmt den Hund bis zum Vortag aus „Handlungsbedarf“ und
+  dessen Zähler. Am Termin ist er wieder fällig. Die übrigen Ansichten und
+  Kennzahlfilter zeigen die Angaben weiterhin. Ohne Termin gilt die normale
+  Handlungsbedarfsregel; Löschen erledigt keine fehlenden Angaben.
+- Sobald alle nachzufragenden Angaben vollständig sind (einschließlich Geburtstag
+  und erforderlichen Nachweisen), entfernt die App den Termin automatisch.
+
 ## Fotoeinwilligung (je Halter) und Einstellungen
 
 - Die Einwilligung zu Fotoaufnahmen gilt für die **Person**, nicht für einen Hund – deshalb

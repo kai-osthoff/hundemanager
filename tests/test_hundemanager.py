@@ -35,7 +35,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Alles, was ausgeliefert wird - bewusst keine handgepflegte Liste, damit neue Dateien
 # (z.B. nachweise.py) nicht im Test fehlen
-NICHT_AUSGELIEFERT = {'.git', '.github', '.venv', 'instance', 'tests', '__pycache__', '.DS_Store', 'VERSION'}
+NICHT_AUSGELIEFERT = {'.git', '.github', '.venv', 'instance', 'tests', '__pycache__', '.DS_Store', 'VERSION',
+                      '.shepherd-uploads', '.superpowers'}
 PROGRAMM = sorted(e for e in os.listdir(REPO) if e not in NICHT_AUSGELIEFERT)
 WINDOWS = os.name == 'nt'
 
@@ -1322,6 +1323,75 @@ class WiedervorlageTests(unittest.TestCase):
         with closing(sqlite3.connect(self.db)) as v:
             return v.execute('SELECT wiedervorlage_am FROM hund WHERE id = 1').fetchone()[0]
 
+    def test_eigenes_datum_speichern_anzeigen_und_loeschen(self):
+        termin = (date.today() + timedelta(days=40)).isoformat()
+        ergebnis = json.loads(self.oeffne('/hund/1/wiedervorlage', urllib.parse.urlencode(
+            dict(aktion='setzen', datum=termin)).encode()))
+        self.assertEqual(self.datum(), termin)
+        self.assertEqual(ergebnis['datum_iso'], termin)
+        self.assertFalse(ergebnis['faellig'])
+        for pfad in ('/', '/hund/1/nachweise?art=impfpass'):
+            seite = self.oeffne(pfad).decode('utf-8')
+            self.assertIn(date.fromisoformat(termin).strftime('%d.%m.%Y'), seite)
+            self.assertIn(f'value="{termin}"', seite)
+            self.assertIn('data-wiedervorlage-loeschen', seite)
+        for _ in range(2):
+            ergebnis = json.loads(self.oeffne('/hund/1/wiedervorlage', b'aktion=loeschen'))
+            self.assertIsNone(self.datum())
+            self.assertIsNone(ergebnis['datum'])
+            self.assertIsNone(ergebnis['datum_iso'])
+            self.assertFalse(ergebnis['faellig'])
+        self.assertNotIn(f'value="{termin}"', self.oeffne('/').decode('utf-8'))
+        self.oeffne('/hund/1/wiedervorlage', b'')
+        self.assertEqual(self.datum(), (date.today() + timedelta(days=14)).isoformat())
+
+    def test_ungueltige_aktionen_lassen_termin_unveraendert(self):
+        self.oeffne('/hund/1/wiedervorlage', b'')
+        vorher = self.datum()
+        for daten in ({'aktion': 'setzen'}, {'aktion': 'anders'}, {'aktion': ''},
+                      *({'aktion': 'setzen', 'datum': wert} for wert in
+                        ('', 'abc', '2026-02-30', '08.10.2026', '20261008', '2026-1-1'))):
+            with self.subTest(daten=daten):
+                with self.assertRaises(urllib.error.HTTPError) as fehler:
+                    self.oeffne('/hund/1/wiedervorlage', urllib.parse.urlencode(daten).encode())
+                self.assertEqual(fehler.exception.code, 400)
+                self.assertTrue(json.loads(fehler.exception.read())['fehler'])
+                self.assertEqual(self.datum(), vorher)
+        with self.assertRaises(urllib.error.HTTPError) as fehler:
+            self.oeffne('/hund/99999/wiedervorlage', b'aktion=loeschen')
+        self.assertEqual(fehler.exception.code, 404)
+
+    def test_zukuenftiger_termin_stellt_nur_handlungsbedarf_zurueck(self):
+        gestern = (date.today() - timedelta(days=1)).isoformat()
+        with closing(sqlite3.connect(self.db)) as v:
+            v.execute('UPDATE hund SET gueltig_l = ? WHERE id = 1', (gestern,))
+            v.commit()
+        morgen = (date.today() + timedelta(days=1)).isoformat()
+        for daten in (b'', urllib.parse.urlencode(dict(aktion='setzen', datum=morgen)).encode()):
+            self.oeffne('/hund/1/wiedervorlage', daten)
+            seite = self.oeffne('/?ansicht=handlungsbedarf').decode('utf-8')
+            self.assertFalse('data-wiedervorlage="1"' in seite)
+            self.assertIn('Handlungsbedarf (3)', seite)
+            for pfad in ('/', '/?ansicht=alle', '/?filter=abgelaufen', '/nachweise?art=impfpass'):
+                self.assertIn('data-wiedervorlage="1"', self.oeffne(pfad).decode('utf-8'))
+        for termin in (date.today().isoformat(), gestern):
+            ergebnis = json.loads(self.oeffne('/hund/1/wiedervorlage', urllib.parse.urlencode(
+                dict(aktion='setzen', datum=termin)).encode()))
+            self.assertTrue(ergebnis['faellig'])
+            seite = self.oeffne('/?ansicht=handlungsbedarf').decode('utf-8')
+            self.assertIn('data-wiedervorlage="1"', seite)
+            self.assertIn('Handlungsbedarf (4)', seite)
+        self.oeffne('/hund/1/wiedervorlage', urllib.parse.urlencode(
+            dict(aktion='setzen', datum=morgen)).encode())
+        self.oeffne('/hund/1/wiedervorlage', b'aktion=loeschen')
+        self.assertIn('Handlungsbedarf (4)', self.oeffne('/?ansicht=handlungsbedarf').decode('utf-8'))
+        with closing(sqlite3.connect(self.db)) as v:
+            v.execute('UPDATE person SET aktiv = 0 WHERE id = 1')
+            v.commit()
+        seite = self.oeffne('/?ansicht=handlungsbedarf').decode('utf-8')
+        self.assertNotIn('data-wiedervorlage="1"', seite)
+        self.assertIn('Handlungsbedarf (2)', seite)
+
     def test_speichern_einstellungen_und_faellige_anzeige(self):
         self.assertIsNone(self.datum())  # Migration aus altem Schema, keine erfundene Erinnerung
         seite = self.oeffne('/').decode('utf-8')
@@ -1352,9 +1422,10 @@ class WiedervorlageTests(unittest.TestCase):
         self.assertEqual(self.datum(), (date.today() + timedelta(days=14)).isoformat())
 
     def test_nur_vollstaendige_angaben_entfernen_wiedervorlage(self):
-        self.oeffne('/hund/1/wiedervorlage', b'')
+        self.oeffne('/hund/1/wiedervorlage', urllib.parse.urlencode(
+            dict(aktion='setzen', datum=(date.today() + timedelta(days=40)).isoformat())).encode())
         zukunft = (date.today() + timedelta(days=365)).isoformat()
-        daten = dict(name='Bello', geburtstag='2020-01-01', haftpflicht_gueltig='ja',
+        daten = dict(name='Bello', geburtstag='', haftpflicht_gueltig='ja',
                      gueltig_shp_dap_dhp=zukunft, gueltig_l=zukunft,
                      gueltig_bbpi=zukunft, gueltig_t=zukunft)
         self.oeffne('/hund/1/bearbeiten', urllib.parse.urlencode(daten).encode())
@@ -1364,8 +1435,13 @@ class WiedervorlageTests(unittest.TestCase):
         sha = re.search(r'name="sha256" value="([0-9a-f]{64})"', seite).group(1)
         self.oeffne('/hund/1/haftpflicht/speichern', urllib.parse.urlencode(
             dict(sha256=sha, endung='pdf', original_name='Test.pdf', gueltig_bis=zukunft)).encode())
+        self.assertIsNotNone(self.datum())  # Geburtstag fehlt noch
+        daten['geburtstag'] = '2020-01-01'
+        self.oeffne('/hund/1/bearbeiten', urllib.parse.urlencode(daten).encode())
         self.assertIsNone(self.datum())
         self.assertIsNone(json.loads(self.oeffne('/hund/1/wiedervorlage', b''))['datum'])
+        self.assertIsNone(json.loads(self.oeffne('/hund/1/wiedervorlage', urllib.parse.urlencode(
+            dict(aktion='setzen', datum=zukunft)).encode()))['datum'])
 
     def test_faellige_wiedervorlage_bleibt_im_handlungsbedarf(self):
         zukunft = (date.today() + timedelta(days=365)).isoformat()

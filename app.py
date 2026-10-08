@@ -448,6 +448,7 @@ def hund_ansicht(hund):
         'gesamt': gesamt,
         'gesamt_text': GESAMT_TEXT[gesamt],
         'nachfragen': nachfragen,
+        'handlungsbedarf': hund.wiedervorlage_am <= heute if hund.wiedervorlage_am else gesamt != 'ok',
         'wiedervorlage_faellig': bool(hund.wiedervorlage_am and hund.wiedervorlage_am <= heute),
         'whatsapp_nachfrage': whatsapp_nachfrage,
         'email_nachfrage': email_nachfrage,
@@ -468,12 +469,26 @@ def erledigte_wiedervorlagen_entfernen(session):
 @app.route('/hund/<int:hund_id>/wiedervorlage', methods=['POST'])
 def wiedervorlage_speichern(hund_id):
     hund = db.get_or_404(Hund, hund_id)
-    if hund_ansicht(hund)['nachfragen']:
-        hund.wiedervorlage_am = date.today() + timedelta(days=int(einstellung('wiedervorlage_tage')))
+    aktion = request.form.get('aktion')
+    if aktion not in (None, 'setzen', 'loeschen'):
+        return jsonify(fehler='Diese Wiedervorlage-Aktion ist unbekannt.'), 400
+    if aktion == 'setzen':
+        wert = request.form.get('datum', '')
+        try:
+            datum = date.fromisoformat(wert)
+            if datum.isoformat() != wert:
+                raise ValueError
+        except ValueError:
+            return jsonify(fehler='Bitte ein gültiges Datum für die Wiedervorlage auswählen.'), 400
     else:
+        datum = date.today() + timedelta(days=int(einstellung('wiedervorlage_tage')))
+    if aktion == 'loeschen' or not hund_ansicht(hund)['nachfragen']:
         hund.wiedervorlage_am = None
+    else:
+        hund.wiedervorlage_am = datum
     db.session.commit()
     return jsonify(datum=format_datum(hund.wiedervorlage_am) if hund.wiedervorlage_am else None,
+                   datum_iso=hund.wiedervorlage_am.isoformat() if hund.wiedervorlage_am else None,
                    faellig=bool(hund.wiedervorlage_am and hund.wiedervorlage_am <= date.today()))
 
 
@@ -550,7 +565,7 @@ def index():
     for person in (alle_personen if ansicht == 'alle' else aktive):
         hunde = [hund_ansicht(h) for h in sorted(person.hunde, key=lambda h: h.name.lower())]
         if ansicht == 'handlungsbedarf':
-            hunde = [h for h in hunde if h['gesamt'] != 'ok' or h['wiedervorlage_faellig']]
+            hunde = [h for h in hunde if h['handlungsbedarf']]
             if not hunde:
                 continue
         if filter_:
@@ -567,7 +582,7 @@ def index():
         'bald': impf_stati.count('bald-ablaufend'),
         'abgelaufen': impf_stati.count('abgelaufen'),
         'ohne_haftpflicht': sum(1 for h in aktive_hunde if h['haftpflicht'] not in ('gueltig', 'bald-ablaufend')),
-        'handlungsbedarf': sum(1 for h in aktive_hunde if h['gesamt'] != 'ok' or h['wiedervorlage_faellig']),
+        'handlungsbedarf': sum(1 for h in aktive_hunde if h['handlungsbedarf']),
         'ohne_fotoeinwilligung': sum(1 for p in aktive if p.foto_status in ('fehlt', 'ohne-nachweis')),
     }
 
@@ -1384,6 +1399,7 @@ def einstellungen_kontext():
     # Für den Einstellungsdialog im Kopf jeder Seite
     return {'einstellungen_info': EINSTELLUNGEN,
             'einstellungen_werte': {s: einstellung(s) for s in EINSTELLUNGEN},
+            'wiedervorlage_standard': date.today() + timedelta(days=int(einstellung('wiedervorlage_tage'))),
             # Beispiel der Anfrage an den Ansprechpartner - der Vorname wird im Dialog live eingesetzt
             'kontaktdaten_beispiel': whatsapp.kontaktdaten_nachricht(
                 KONTAKTDATEN_VORNAME_MARKE, 'Max Mustermann', ['Bello']),

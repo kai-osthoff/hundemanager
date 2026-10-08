@@ -1,5 +1,6 @@
 <div class="wiedervorlage" data-wiedervorlage="{{ hund.id }}"
-     data-url="{{ url_for('wiedervorlage_speichern', hund_id=hund.id) }}">
+     data-url="{{ url_for('wiedervorlage_speichern', hund_id=hund.id) }}"
+     data-datum="{{ hund.wiedervorlage_am|iso_datum }}" data-standard="{{ wiedervorlage_standard|iso_datum }}">
     <div data-wiedervorlage-status role="status"{% if h.wiedervorlage_faellig %} class="status-cell status-abgelaufen"{% endif %}>{% if hund.wiedervorlage_am %}{{ 'Wiedervorlage fällig seit' if h.wiedervorlage_faellig else 'Wiedervorlage am' }} {{ hund.wiedervorlage_am|format_datum }}{% endif %}</div>
     <div data-wiedervorlage-countdown hidden>
         <span data-wiedervorlage-text></span>
@@ -7,4 +8,22 @@
         <button type="button" class="mini" data-wiedervorlage-abbrechen>Abbrechen</button>
         <button type="button" class="mini" data-wiedervorlage-ok title="Wiedervorlage sofort speichern">OK</button>
     </div>
+    <div class="wiedervorlage-aktionen">
+        <button type="button" class="mini" data-wiedervorlage-bearbeiten aria-expanded="false"
+                aria-controls="wiedervorlage-editor-{{ hund.id }}">{{ 'Datum ändern' if hund.wiedervorlage_am else 'Datum setzen' }}</button>
+        <button type="button" class="mini" data-wiedervorlage-loeschen{% if not hund.wiedervorlage_am %} hidden{% endif %}>Wiedervorlage löschen</button>
+    </div>
+    <div id="wiedervorlage-editor-{{ hund.id }}" class="wiedervorlage-editor" data-wiedervorlage-editor hidden>
+        <form method="POST" action="{{ url_for('wiedervorlage_speichern', hund_id=hund.id) }}" data-wiedervorlage-form>
+            <input type="hidden" name="aktion" value="setzen">
+            <div class="form-group">
+                <label for="wiedervorlage-datum-{{ hund.id }}">Wiedervorlage am</label>
+                <input type="date" id="wiedervorlage-datum-{{ hund.id }}" name="datum" data-wiedervorlage-datum
+                       value="{{ (hund.wiedervorlage_am or wiedervorlage_standard)|iso_datum }}" required>
+            </div>
+            <button type="submit" class="mini">Speichern</button>
+            <button type="button" class="mini" data-wiedervorlage-verwerfen>Abbrechen</button>
+        </form>
+    </div>
+    <div data-wiedervorlage-fehler role="alert" hidden></div>
 </div>
