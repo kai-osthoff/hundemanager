@@ -19,6 +19,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from sqlalchemy import event, func, inspect, text #NEU
 import backup
 import bilder
+import erkennung
 import impfstoffe
 import mailto
 import nachweise
@@ -197,6 +198,8 @@ class Nachweis(db.Model):
     bemerkung = db.Column(db.Text, nullable=True)
     # Anzeige-Drehung der Datei in Grad (im Uhrzeigersinn) - die Datei selbst bleibt unverändert
     drehung = db.Column(db.Integer, nullable=True, default=0)
+    # Wie gut war die automatische Erkennung? Nur je Feld übernommen/geändert, keine Inhalte (JSON)
+    erkennung = db.Column(db.Text, nullable=True)
     # Weitere Fotos desselben Nachweises (z.B. mehrere Impfpass-Seiten); die erste Datei steht oben
     weitere_seiten = db.relationship('NachweisSeite', backref='nachweis', lazy=True,
                                      cascade='all, delete-orphan', order_by='NachweisSeite.nr')
@@ -419,7 +422,7 @@ def hund_ansicht(hund):
             hinweis = 'heute' if tage == 0 else ('morgen' if tage == 1 else f'in {tage} Tagen')
         impfungen.append({'name': name, 'feld': feld, 'datum': datum, 'status': status, 'hinweis': hinweis,
                           'beschreibung': impfstoffe.beschreibung(feld),
-                          'aufkleber': ', '.join(impfstoffe.aufkleber_fuer(feld))})
+                          'aufkleber': ', '.join(impfstoffe.aufkleber_fuer(feld)[:4])})
 
     nachweis = hund.aktueller_nachweis
     if nachweis:
@@ -755,9 +758,10 @@ def hund_nachweise(hund_id):
 MAX_DATEIEN = 10  # je Upload - ein Impfpass hat selten mehr beschriebene Seiten
 
 
-def _angaben_seite(hund, nachweis, art, vorschlag, seiten, warnungen=(), text_erkannt=False):
+def _angaben_seite(hund, nachweis, art, vorschlag, seiten, warnungen=(), text_erkannt=False, erkannt_fotos=None):
     """Dialog zum Prüfen/Eintragen der Angaben - mit den Fotos daneben."""
     return render_template('nachweis_angaben.html', hund=hund, nachweis=nachweis, art=art,
+                           erkannt_fotos=erkannt_fotos, impf_info=impfstoffe.IMPFUNG_INFO,
                            art_info=NACHWEIS_ARTEN[art], impfungen_auswahl=[n for n, _ in IMPFUNGEN],
                            impfungen=hund_ansicht(hund)['impfungen'], vorschlag=vorschlag,
                            warnungen=list(warnungen), seiten=seiten, text_erkannt=text_erkannt,
@@ -781,6 +785,7 @@ def nachweis_hochladen(hund_id):
         return redirect(url_for('hund_nachweise', hund_id=hund.id, art=art))
 
     seiten, erste_daten = [], None
+    ergebnisse = []  # Erkennung je Foto (nur Impfpass)
     for datei in dateien:
         daten = datei.read()
         name = os.path.basename(datei.filename)[:255]
@@ -796,6 +801,8 @@ def nachweis_hochladen(hund_id):
         # Quer oder auf dem Kopf fotografiert? Nur die Anzeige wird gedreht, nie die Datei
         drehung = 0 if endung == 'pdf' else bilder.ausrichtung_erkennen(daten)
         seiten.append({'sha256': sha256, 'endung': endung, 'original_name': name, 'drehung': drehung})
+        if art == 'impfpass' and endung != 'pdf' and erkennung.verfuegbar():
+            ergebnisse.append(erkennung.foto_auswerten(daten, drehung))
 
     vorschlag = {'eingereicht_von': hund.besitzer.vollstaendiger_name}
     warnungen = []
@@ -807,10 +814,44 @@ def nachweis_hochladen(hund_id):
         tier = vorschlag.get('tier')
         if tier and hund.name.casefold() not in tier.casefold():
             warnungen.append(f'Im Nachweis steht das Tier „{tier}“ – passt das zu {hund.name}?')
+    erkannt_fotos = None
+    if ergebnisse:
+        erkannt_fotos = erkennung.zusammenfassen(ergebnisse)
+        erkannt_fotos['drehungen'] = [s['drehung'] for s in seiten]
+        for feld, bis in erkannt_fotos['vorschlag'].items():
+            vorschlag[f'impf_{feld}'] = bis
+        pass_foto = erkannt_fotos['passnummer']
+        if pass_foto and hund.passnummer and pass_foto != hund.passnummer:
+            warnungen.append(f'Auf den Fotos steht die Passnummer {passnummer_anzeige(pass_foto)}, bei {hund.name} '
+                             f'ist {passnummer_anzeige(hund.passnummer)} eingetragen – gehört der Pass vielleicht '
+                             f'zu einem anderen Hund?')
     gueltig_bis = vorschlag.get('gueltig_bis')
     if gueltig_bis and gueltig_bis < date.today():
         warnungen.append('Laut Dokument ist dieser Nachweis bereits abgelaufen.')
-    return _angaben_seite(hund, None, art, vorschlag, seiten, warnungen, erkannt)
+    return _angaben_seite(hund, None, art, vorschlag, seiten, warnungen, erkannt, erkannt_fotos)
+
+
+def _erkennung_aus_formular():
+    """Was die Erkennung beim Hochladen vorgeschlagen hat (verstecktes Feld) - oder None."""
+    try:
+        erk = json.loads(request.form.get('erkennung') or 'null')
+    except ValueError:
+        return None
+    return erk if isinstance(erk, dict) and isinstance(erk.get('vorschlag'), dict) else None
+
+
+def _erkannte_angaben_uebernehmen(hund):
+    """Häkchen im Dialog: Passnummer/Geburtstag von den Fotos beim Hund eintragen (nur, wenn dort leer)."""
+    meldung = ''
+    passnummer = passnummer_normalisieren(request.form.get('passnummer_uebernehmen'))
+    if passnummer and not hund.passnummer:
+        hund.passnummer = passnummer
+        meldung += f' Passnummer {passnummer_anzeige(passnummer)} eingetragen.'
+    geburtstag = parse_datum(request.form.get('geburtstag_uebernehmen'))
+    if geburtstag and not hund.geburtstag:
+        hund.geburtstag = geburtstag
+        meldung += f' Geburtstag {format_datum(geburtstag)} eingetragen.'
+    return meldung
 
 
 def _seiten_aus_formular():
@@ -930,13 +971,18 @@ def nachweis_speichern(hund_id):
             nr=nr, datei_sha256=seite['sha256'], datei_endung=seite['endung'],
             original_name=seite['original_name'], drehung=seite['drehung']))
     fehler = _nachweis_angaben(nachweis)
+    erk = _erkennung_aus_formular()
     if fehler:
         flash(fehler, 'error')
-        return _angaben_seite(hund, None, art, _formular_vorschlag(), seiten)
+        return _angaben_seite(hund, None, art, _formular_vorschlag(), seiten, erkannt_fotos=erk)
+    if erk:
+        nachweis.erkennung = json.dumps(erkennung.rueckmeldung(
+            erk, {f: d.isoformat() for f, d in nachweis.impf_daten.items()}))
     db.session.add(nachweis)
     meldung = ''
     if NACHWEIS_ARTEN[art]['impfungen']:
         meldung = _impf_meldung(*impfungen_uebernehmen(hund, nachweis.impf_daten))
+        meldung += _erkannte_angaben_uebernehmen(hund)
     db.session.commit()
     gueltig = f' (gültig bis {format_datum(nachweis.gueltig_bis)})' if nachweis.gueltig_bis else ''
     flash(f'{nachweis.art_name}-Nachweis für {hund.name} gespeichert{gueltig}.{meldung}', 'success')
@@ -1019,7 +1065,8 @@ def nachweis_bild(sha256, endung):
         return 'Nicht gefunden', 404
     if endung != 'pdf' and os.path.exists(datei_pfad):
         with open(datei_pfad, 'rb') as f:
-            ergebnis = bilder.ansicht(f.read(), request.args.get('drehung', 0))
+            ergebnis = bilder.ansicht(f.read(), request.args.get('drehung', 0),
+                                      ausschnitt=request.args.get('ausschnitt'))
         if ergebnis:
             antwort = send_file(io.BytesIO(ergebnis[0]), mimetype=ergebnis[1])
             # Inhalt und Drehung stecken in der Adresse - der Browser darf sich das Bild merken

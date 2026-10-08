@@ -221,6 +221,27 @@ TESTTEXT = ['Impfung gegen Tollwut – gültig bis 09.12.2027', 'Tierarztpraxis 
             'Staupe, Hepatitis, Parvovirose (SHP) – Bello', 'Unterschrift und Stempel des Tierarztes']
 
 
+def passfoto():
+    """Erfundene Tollwutseite eines EU-Heimtierausweises - gedruckt statt handschriftlich."""
+    from PIL import Image, ImageDraw, ImageFont
+    bild = Image.new('RGB', (1500, 1900), (238, 241, 250))
+    stift, gross, klein = ImageDraw.Draw(bild), ImageFont.load_default(size=56), ImageFont.load_default(size=34)
+    stift.text((330, 80), 'Tollwutimpfung /', fill=(20, 20, 20), font=gross)
+    stift.text((330, 160), 'Vaccination against Rabies', fill=(40, 40, 150), font=gross)
+    stift.rectangle((90, 400, 520, 560), fill='white')
+    stift.text((110, 420), 'Nobivac T', fill=(20, 20, 20), font=gross)
+    stift.text((110, 500), 'Ch.-B. A123A01', fill=(20, 20, 20), font=klein)
+    for y, text in ((400, 'Impfdatum / Vaccination Date'), (600, 'Gültig ab / Valid from'),
+                    (780, 'Gültig bis / Valid until')):
+        stift.text((640, y), text, fill=(30, 30, 30), font=klein)
+    stift.text((660, 460), '13.12.2025', fill=(20, 30, 140), font=gross)
+    stift.text((660, 840), '13.12.2028', fill=(20, 30, 140), font=gross)
+    stift.text((330, 1700), 'DE12 3456789', fill=(20, 20, 20), font=gross)
+    puffer = io.BytesIO()
+    bild.save(puffer, 'JPEG', quality=92)
+    return puffer.getvalue()
+
+
 def textfoto(art='block', drehung=0, format='JPEG', exif_ausrichtung=None):
     """Foto einer erfundenen Impfpass-Seite, um drehung Grad im Uhrzeigersinn verdreht aufgenommen."""
     from PIL import Image, ImageDraw, ImageFont
@@ -998,6 +1019,31 @@ class HaftpflichtOberflaecheTests(unittest.TestCase):
                 daten.append((name, w))
         return self.oeffne('/hund/1/nachweise/speichern', urllib.parse.urlencode(daten).encode()).decode('utf-8')
 
+    @unittest.skipUnless(importlib.util.find_spec('rapidocr'), 'RapidOCR ist nicht installiert')
+    def test_impfpass_foto_wird_erkannt_und_vorgeschlagen(self):
+        koerper, typ = multipart_mehrere([('art', 'impfpass')], [('datei', 'tollwut.jpg', passfoto())])
+        dialog = self.oeffne('/hund/1/nachweise/hochladen', koerper, typ).decode('utf-8')
+        self.assertIn('Auf den Fotos erkannt', dialog)
+        self.assertIn('Passnummer: <strong>DE12 3456789</strong>', dialog)
+        self.assertRegex(dialog, r'id="impf_gueltig_t" name="impf_gueltig_t"[^>]*value="2028-12-13"')
+        self.assertIn('erkannt – bitte prüfen', dialog)
+        ausschnitt = re.search(r'class="ausschnitt"[^>]*src="([^"]+)"', dialog).group(1).replace('&amp;', '&')
+        from PIL import Image
+        self.assertLess(Image.open(io.BytesIO(self.oeffne(ausschnitt))).size[1], 1900)
+
+        import html
+        formular = [('art', 'impfpass'), ('impf_gueltig_t', '2028-12-13'), ('passnummer_uebernehmen', 'DE123456789')]
+        for name in ('sha256', 'endung', 'original_name', 'drehung', 'erkennung'):
+            formular.append((name, html.unescape(re.search(rf'name="{name}" value="([^"]*)"', dialog).group(1))))
+        seite = self.oeffne('/hund/1/nachweise/speichern', urllib.parse.urlencode(formular).encode()).decode('utf-8')
+        self.assertIn('Passnummer DE12 3456789 eingetragen', seite)
+        with closing(sqlite3.connect(self.db)) as v:
+            self.assertEqual(v.execute('SELECT gueltig_t, passnummer FROM hund WHERE id = 1').fetchone(),
+                             ('2028-12-13', 'DE123456789'))
+            rueckmeldung = json.loads(v.execute('SELECT erkennung FROM nachweis').fetchone()[0])
+        self.assertEqual(rueckmeldung['felder'], {'gueltig_t': 'uebernommen'})
+        self.assertNotIn('3456789', json.dumps(rueckmeldung))  # keine Inhalte gespeichert
+
     def test_impfpass_foto_in_derselben_ablage(self):
         foto = b'\xff\xd8\xff\xe0' + b'Impfpass-Foto' * 50
         seite = self.nachweis_speichern('impfpass', foto, 'impfpass.jpg', {
@@ -1069,6 +1115,174 @@ class ImpfstoffTests(unittest.TestCase):
             info = self.imp.IMPFUNG_INFO[feld]
             self.assertTrue(info['krankheiten'])
             self.assertTrue(self.imp.aufkleber_fuer(feld))
+
+
+class ErkennungTests(unittest.TestCase):
+    """Auswertung der Texterkennung - mit erfundenen Textblöcken nach dem Muster echter Fotos.
+    Positionen wie auf einem Handyfoto (3024x4032), Inhalte ausgedacht."""
+
+    HEUTE = date(2026, 10, 8)
+
+    def setUp(self):
+        sys.path.insert(0, REPO)
+        self.erk = lade_modul(os.path.join(REPO, 'erkennung.py'), 'erkennung_test')
+        sys.path.remove(REPO)
+
+    def b(self, text, x, y, w=None, h=40):
+        return self.erk.Block(text, x, y, x + (w or len(text) * 22), y + h)
+
+    def auswerten(self, bloecke):
+        return self.erk.auswerten(bloecke, 3024, 4032, heute=self.HEUTE)
+
+    def label(self, text, x, y):
+        return self.b(text, x, y, w=400, h=36)
+
+    def sonstige_impfungen(self):
+        b, l = self.b, self.label
+        return [
+            b('IX.', 418, 534), b('Sonstige Impfungen /', 721, 554), b('Other Vaccinations', 727, 642),
+            b('Hersteller und Name', 299, 784), b('Chargen-', 788, 776), b('Batch Number', 794, 902),
+            b('DE12', 182, 758, w=40, h=120), b('3456789', 180, 963, w=40, h=200),  # senkrecht am Rand
+            # Zeile 1: SHP + L4, Beschriftung "gültig bis" unlesbar - das Datum darunter ist trotzdem kein Impfdatum
+            l('Impfdatum / Vaccination Date', 1025, 967), b('03.04.2023', 1030, 1020, w=190, h=50),
+            b('sui is i ngl', 1039, 1146, w=200, h=36), b('03.04.2024', 1037, 1221, w=190, h=50),
+            b('Nobivac SHP', 257, 1000), b('verw. bis', 261, 1100), b('05-2024', 371, 1100),
+            b('Nobivac® L4', 600, 1050), b('Ch.-B. A111A01', 600, 1100),
+            b('Tierärztliche Klinik', 1650, 1000), b('Tel. 01234/5678', 1600, 1150),
+            # Zeile 2: Datum in Stücken, Beschriftung verlesen, Aufkleber in zwei Blöcken
+            l('Impfdatum / Vaccination Date', 1029, 1335), b('12.03.', 1040, 1390, w=110, h=50),
+            b('24', 1160, 1395, w=50, h=50),
+            l('Dültig bis / Valid until', 1035, 1522), b('12.03.25', 1031, 1587, w=160, h=50),
+            b('Virbagen®', 554, 1548), b('canis L', 735, 1556), b('8XYZ', 542, 1656), b('03/2025', 701, 1656),
+            b('Seite / Page 22/32', 178, 1631),
+            # Zeile 3: durchgestrichen, statt Datum nur ein Strich ("1" -> "A"), kein Aufkleber
+            l('Impfdatum / Vaccination Date', 1055, 1711), b('17.01.23', 1055, 1770, w=160, h=50),
+            l('Gültig bis / Valid until', 1049, 1894), b('A', 1061, 1955, w=20, h=50),
+            # Zeile 4: drei Aufkleber in einer Zeile
+            l('Impfdatum / Vaccination Date', 1051, 2080), b('22.05.25', 1065, 2140, w=160, h=50),
+            l('Gültig bis / Valid until', 1055, 2260), b('22.05.26', 1069, 2330, w=160, h=50),
+            b('Nobivac® SHP', 375, 2090), b('Nobivac® L4', 729, 2090), b('NobivacBbPi', 375, 2200),
+            b('Exp.', 731, 2190), b('05-2026', 820, 2190),
+            b('DE12 3456789', 211, 2300),
+            # Zeile 5: überschriebenes Datum, unlesbar zusammengezogen
+            l('Impfdatum / Vaccination Date', 1045, 2450), b('07.05.26', 1033, 2510, w=160, h=50),
+            l('Gültig bis / Valid until', 1037, 2630), b('07.122027', 1037, 2700, w=190, h=50),
+            b('Nobivac SHP', 446, 2470),
+            # leere Zeile, nur der Stempel ragt hinein - kein Eintrag
+            l('Impfdatum / Vaccination Date', 1045, 2830), b('Stempel und Unterschrift', 1000, 2950),
+            l('Gültig bis / Valid until', 1037, 3010),
+        ]
+
+    def tollwut(self, beschriftung=('Impfdatum / Vaccination Date', 'Gültig ab / Valid from', 'Gültig bis / Valid until')):
+        b, l = self.b, self.label
+        impf, ab, bis = beschriftung
+        return [
+            b('V.', 575, 532), b('Tollwutimpfung /', 786, 540), b('Vaccination against Rabies', 792, 640),
+            l(impf, 1206, 981), b('13.12.2022', 1214, 1028, w=190, h=45), l(ab, 1208, 1105),
+            l(bis, 1208, 1229), b('13.01.2023', 1214, 1288, w=190, h=45),
+            b('NobivacT', 595, 1079), b('Verw. bis', 607, 1190), b('11-2025', 715, 1190),
+            l(impf, 1212, 1367), b('tr', 1218, 1428), l(ab, 1212, 1489),
+            l(bis, 1212, 1613), b('hzrotr', 1220, 1674),
+            l(impf, 1212, 1745), b('27.02.24', 1212, 1794, w=160, h=45), l(ab, 1210, 1861),
+            l(bis, 1212, 1983), b('27.02.26', 1208, 2030, w=160, h=45),
+            l(impf, 1202, 2178), b('07.05.2026', 1200, 2233, w=190, h=45), l(ab, 1204, 2300),
+            l(bis, 1204, 2420), b('07.05.2029', 1196, 2473, w=190, h=45),
+            b('Seite / Page 10/32', 343, 1682),
+        ]
+
+    def test_sonstige_impfungen(self):
+        e = self.auswerten(self.sonstige_impfungen())
+        self.assertIn('impfungen', e['seiten'])
+        self.assertEqual(e['passnummer'], 'DE123456789')
+        zeilen = e['zeilen']
+        self.assertEqual(len(zeilen), 5)
+        z1, z2, z3, z4, z5 = zeilen
+        self.assertEqual((z1['impfdatum'], z1['gueltig_bis'], z1['sicher']), ('2023-04-03', '2024-04-03', True))
+        self.assertEqual(sorted(z1['felder']), ['gueltig_l', 'gueltig_shp_dap_dhp'])
+        self.assertEqual((z2['impfdatum'], z2['gueltig_bis'], z2['felder'], z2['sicher']),
+                         ('2024-03-12', '2025-03-12', ['gueltig_l'], True))
+        self.assertFalse(z3['sicher'])
+        self.assertEqual(sorted(z4['felder']), ['gueltig_bbpi', 'gueltig_l', 'gueltig_shp_dap_dhp'])
+        self.assertTrue(z4['sicher'])
+        self.assertFalse(z5['sicher'])
+        self.assertEqual(z5['text_bis'], '07.122027')
+        for z in zeilen:
+            x, y, w, h = z['box']
+            self.assertTrue(0 <= x < 1 and 0 <= y < 1 and 0 < w <= 1 and 0 < h <= 1, z['box'])
+        # Je Impfung das späteste sichere "gültig bis" - "verw. bis" der Aufkleber zählt nie
+        g = self.erk.zusammenfassen([e])
+        self.assertTrue(g['erkannt'])
+        self.assertEqual(g['vorschlag'], {'gueltig_shp_dap_dhp': '2026-05-22', 'gueltig_l': '2026-05-22',
+                                          'gueltig_bbpi': '2026-05-22'})
+
+    def test_tollwut_ohne_lesbaren_aufkleber_ist_t(self):
+        e = self.auswerten(self.tollwut())
+        self.assertIn('tollwut', e['seiten'])
+        sicher = [(z['impfdatum'], z['gueltig_bis']) for z in e['zeilen'] if z['sicher']]
+        self.assertEqual(sicher, [('2022-12-13', '2023-01-13'), ('2024-02-27', '2026-02-27'),
+                                  ('2026-05-07', '2029-05-07')])
+        self.assertTrue(all(z['felder'] == ['gueltig_t'] for z in e['zeilen']))
+        self.assertEqual(self.erk.zusammenfassen([e])['vorschlag'], {'gueltig_t': '2029-05-07'})
+
+    def test_spaeteres_unsicheres_datum_verhindert_veralteten_vorschlag(self):
+        # Neueste Zeile: Impfdatum unleserlich -> unsicher. Dann nicht die alte Zeile vorschlagen.
+        bloecke = [self.b('XyZ%', b.x0, b.y0) if b.text in ('27.02.24', '07.05.2026') else b for b in self.tollwut()]
+        g = self.erk.zusammenfassen([self.auswerten(bloecke)])
+        self.assertEqual(g['vorschlag'], {})
+        self.assertEqual(g['offen'], ['gueltig_t'])
+        self.assertIn('2029-05-07', [z['gueltig_bis'] for z in g['zeilen'] if not z['sicher']])
+
+    def test_pass_aus_dem_ausland_ueber_englische_beschriftung(self):
+        bloecke = [b for b in self.tollwut(('Date de vaccination / Vaccination date', 'Valable à partir du / Valid from',
+                                            "Valable jusqu'au / Valid until"))
+                   if not b.text.startswith(('Tollwutimpfung', 'V.'))]
+        bloecke = [self.b('Vaccination antirabique /', 786, 540) if b.text == 'Vaccination against Rabies' else b
+                   for b in bloecke] + [self.b('Vaccination against rabies', 792, 600)]
+        g = self.erk.zusammenfassen([self.auswerten(bloecke)])
+        self.assertEqual(g['vorschlag'], {'gueltig_t': '2029-05-07'})
+
+    def test_geburtsdatum_und_passnummer(self):
+        b = self.b
+        e = self.auswerten([
+            b('II.', 400, 420), b('Beschreibung des Tieres /', 1055, 422), b('Description of Animal', 1055, 536),
+            b('1. Name* / Name*', 747, 1904), b('Bello', 1339, 1857),
+            b('5. Geburtsdatum* /', 731, 2615, w=300, h=45), b('15.06.2021', 1333, 2625, w=280, h=60),
+            b('Date of Birth*', 731, 2717), b('6. Farbe / Color', 729, 2841), b('schwarz', 1316, 2804),
+            b('DE12 3456789', 878, 3582), b('Seite / Page 7/32', 2173, 3591),
+        ])
+        self.assertIn('beschreibung', e['seiten'])
+        self.assertEqual((e['geburtstag'], e['passnummer'], e['zeilen']), ('2021-06-15', 'DE123456789', []))
+
+    def test_besitzerseite_liefert_nur_die_passnummer(self):
+        b = self.b
+        e = self.auswerten([
+            b('I.', 380, 150), b('Angaben zum Besitzer /', 480, 160), b('Details of ownership', 480, 220),
+            b('Nachname / Surname', 310, 320), b('Mustermann', 620, 330), b('Anschrift / Address', 300, 470),
+            b('Musterweg 1', 600, 480), b('Telefonnummer* /', 280, 780), b('+49 171 1234567', 600, 790),
+            b('Geburtsdatum', 280, 900), b('01.02.1980', 600, 905),  # gibt es so nicht - darf trotzdem nie greifen
+            b('DE12 3456789', 340, 1850),
+        ])
+        self.assertIn('besitzer', e['seiten'])
+        self.assertEqual((e['passnummer'], e['geburtstag'], e['zeilen']), ('DE123456789', None, []))
+        self.assertNotIn('Mustermann', json.dumps(e))
+
+    def test_fremdes_dokument(self):
+        b = self.b
+        e = self.auswerten([b('Versicherungsbestätigung', 300, 200), b('Hundehalter-Haftpflicht', 300, 300),
+                            b('Gültig bis 31.12.2026', 300, 400), b('Tel. 0711/123456', 300, 500)])
+        g = self.erk.zusammenfassen([e, None])
+        self.assertFalse(g['erkannt'])
+        self.assertEqual((g['vorschlag'], g['passnummer'], g['zeilen']), ({}, None, []))
+
+    def test_daten_lesen(self):
+        lies = self.erk.datum_lesen
+        self.assertEqual(lies('13.12.22'), date(2022, 12, 13))
+        self.assertEqual(lies('19/09/2025'), date(2025, 9, 19))
+        self.assertEqual(lies('27.02. 26'), date(2026, 2, 27))
+        self.assertEqual(lies('13 . 12 . 2022'), date(2022, 12, 13))
+        for kaputt in ('07.122022', '05-2026', '12/2023', '31.02.2024', 'A', '07195/8407', ''):
+            with self.subTest(kaputt):
+                self.assertIsNone(lies(kaputt))
 
 
 class WhatsAppTests(unittest.TestCase):

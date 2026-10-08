@@ -2,6 +2,12 @@
 {% extends "base.html" %}
 
 {% block content %}
+{% macro ausschnitt(z) -%}
+    {%- set seite = seiten[z.seite] -%}
+    <a href="{{ url_for('nachweis_bild', sha256=seite.sha256, endung=seite.endung, drehung=erkannt_fotos.drehungen[z.seite]) }}" target="_blank">
+        <img class="ausschnitt" loading="lazy" alt="Ausschnitt aus Foto {{ z.seite + 1 }}"
+             src="{{ url_for('nachweis_bild', sha256=seite.sha256, endung=seite.endung, drehung=erkannt_fotos.drehungen[z.seite], ausschnitt=z.box|join(',')) }}"></a>
+{%- endmacro %}
 <style>
     .pruefen { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(320px, 1fr); gap: 24px; align-items: start; }
     @media (max-width: 980px) { .pruefen { grid-template-columns: minmax(0, 1fr); } }
@@ -28,6 +34,15 @@
     .impf-zeile .bisher .status-cell { padding: 2px 8px; font-size: 0.8rem; }
     .impf-zeile .warnung { grid-column: 1 / -1; font-size: 0.85rem; color: #7A1A13; font-weight: 600; }
     .hilfe { color: #55625A; font-size: 0.85rem; margin-bottom: 8px; }
+    .erkannt-kasten { background: #EEF6F1; border: 1px solid #BFD8C9; border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; }
+    .erkannt-kasten .zeile { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin-top: 6px; }
+    .erkannt-marke { display: inline-block; background: #D9EEE2; color: #173B2C; border-radius: 4px; padding: 0 6px;
+                     font-size: 0.75rem; font-weight: 600; margin-left: 6px; }
+    img.ausschnitt { display: block; max-width: 100%; max-height: 140px; border: 1px solid #C9D3CC; border-radius: 4px; margin-top: 4px; }
+    .impf-zeile .quelle, .impf-zeile .offen { grid-column: 1 / -1; font-size: 0.8rem; }
+    .impf-zeile .offen { color: #7A4A00; font-weight: 600; }
+    .unsicher-liste { margin-top: 14px; }
+    .unsicher-liste li { list-style: none; border-top: 1px solid #E2E8E4; padding: 8px 0; font-size: 0.85rem; }
     .impfstoff-tabelle { margin-top: 12px; font-size: 0.85rem; }
     .impfstoff-tabelle summary { cursor: pointer; font-weight: 600; }
     .impfstoff-tabelle table { border-collapse: collapse; width: 100%; margin-top: 6px; }
@@ -89,6 +104,33 @@
             </section>
 
             <section aria-label="Angaben">
+                {% if erkannt_fotos %}
+                <input type="hidden" name="erkennung" value="{{ erkannt_fotos|tojson|forceescape }}">
+                <div class="erkannt-kasten" id="erkannt">
+                    {% if not erkannt_fotos.erkannt %}
+                        Auf den Fotos wurde keine Seite des Heimtierausweises erkannt – bitte selbst nachsehen und eintragen.
+                    {% else %}
+                        <strong>Auf den Fotos erkannt</strong> – nur Vorschläge, bitte mit den Ausschnitten vergleichen.
+                        {% if erkannt_fotos.passnummer %}
+                        <div class="zeile">Passnummer: <strong>{{ erkannt_fotos.passnummer|passnummer }}</strong>
+                            {% if not hund.passnummer %}
+                            <label><input type="checkbox" name="passnummer_uebernehmen" value="{{ erkannt_fotos.passnummer }}" checked> bei {{ hund.name }} eintragen</label>
+                            {% elif hund.passnummer == erkannt_fotos.passnummer %}<span>✓ passt zu {{ hund.name }}</span>
+                            {% else %}<span class="offen">⚠ bei {{ hund.name }} steht {{ hund.passnummer|passnummer }}</span>{% endif %}
+                        </div>
+                        {% endif %}
+                        {% if erkannt_fotos.geburtstag %}
+                        {% set geb = erkannt_fotos.geburtstag %}
+                        <div class="zeile">Geburtstag: <strong>{{ geb[8:10] }}.{{ geb[5:7] }}.{{ geb[:4] }}</strong>
+                            {% if not hund.geburtstag %}
+                            <label><input type="checkbox" name="geburtstag_uebernehmen" value="{{ geb }}" checked> bei {{ hund.name }} eintragen</label>
+                            {% elif hund.geburtstag.isoformat() == geb %}<span>✓ passt zu {{ hund.name }}</span>
+                            {% else %}<span class="offen">⚠ bei {{ hund.name }} steht {{ hund.geburtstag|format_datum }}</span>{% endif %}
+                        </div>
+                        {% endif %}
+                    {% endif %}
+                </div>
+                {% endif %}
                 {% if art_info.impfungen %}
                 <fieldset class="impf-eintragen">
                     <legend>Impfungen laut Impfpass – gültig bis</legend>
@@ -107,8 +149,35 @@
                             {% else %}<span class="status-cell status-keine-angabe">nichts</span>{% endif %}
                         </div>
                         <div class="warnung" hidden>Laut Impfpass schon abgelaufen – nach dem Speichern per WhatsApp nachfragen.</div>
+                        {% if erkannt_fotos and i.feld in erkannt_fotos.vorschlag %}
+                        <div class="quelle"><span class="erkannt-marke">erkannt – bitte prüfen</span>
+                            {% for z in erkannt_fotos.zeilen if z.sicher and i.feld in z.felder and z.gueltig_bis == erkannt_fotos.vorschlag[i.feld] %}
+                                {% if loop.first %}{{ ausschnitt(z) }}{% endif %}
+                            {% endfor %}
+                        </div>
+                        {% elif erkannt_fotos and i.feld in erkannt_fotos.offen %}
+                        <div class="offen">Auf den Fotos steht ein späteres Datum, das nicht sicher gelesen wurde – siehe unten.</div>
+                        {% endif %}
                     </div>
                     {% endfor %}
+                    {% set unsicher = erkannt_fotos.zeilen|rejectattr('sicher')|list if erkannt_fotos else [] %}
+                    {% if unsicher %}
+                    <div class="unsicher-liste">
+                        <strong>Nicht sicher erkannt – bitte auf dem Ausschnitt nachsehen</strong>
+                        <ul>
+                        {% for z in unsicher %}
+                            <li>
+                                {% if z.felder %}{% for f in z.felder %}{{ impf_info[f].kurz }}{{ ', ' if not loop.last }}{% endfor %}{% else %}Impfung unbekannt{% endif %}
+                                {% if z.impfstoffe %}({{ z.impfstoffe|join(', ') }}){% endif %} · {{ z.grund }}
+                                {% if z.gueltig_bis %}· gelesen: gültig bis {{ z.gueltig_bis[8:10] }}.{{ z.gueltig_bis[5:7] }}.{{ z.gueltig_bis[:4] }}
+                                    {% if z.felder %}<button type="button" class="knopf" data-uebernehmen="{{ z.felder|join(',') }}" data-datum="{{ z.gueltig_bis }}">Übernehmen</button>{% endif %}
+                                {% elif z.text_bis %}· gelesen: „{{ z.text_bis }}“{% endif %}
+                                {{ ausschnitt(z) }}
+                            </li>
+                        {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
                     <details class="impfstoff-tabelle">
                         <summary>Welcher Aufkleber gehört zu welcher Impfung?</summary>
                         <p class="hilfe"><strong>Achtung:</strong> „verw. bis“ bzw. „Exp.“ auf dem Aufkleber ist das
@@ -198,6 +267,18 @@
                 rahmen.scrollLeft = (e.clientX - r.left) / r.width * rahmen.scrollWidth - r.width / 2;
                 rahmen.scrollTop = (e.clientY - r.top) / r.height * rahmen.scrollHeight - r.height / 2;
             }
+        });
+    });
+    // Unsicher erkannte Zeile nach Prüfen am Ausschnitt mit einem Klick eintragen
+    document.querySelectorAll('[data-uebernehmen]').forEach(function (knopf) {
+        knopf.addEventListener('click', function () {
+            knopf.dataset.uebernehmen.split(',').forEach(function (feld) {
+                var eingabe = document.getElementById('impf_' + feld);
+                if (eingabe) {
+                    eingabe.value = knopf.dataset.datum;
+                    eingabe.dispatchEvent(new Event('input'));
+                }
+            });
         });
     });
     // Sofort sehen, wenn ein eingetragenes Datum schon abgelaufen ist

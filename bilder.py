@@ -149,8 +149,20 @@ def ausrichtung_erkennen(daten):
     return 180 if _oberlaengen(tinte) < -_KOPF_SICHER else 0
 
 
-def ansicht(daten, drehung=0, kante=ANZEIGE_KANTE):
-    """Foto gedreht und verkleinert als JPEG - (bytes, mimetype). None, wenn es kein Bild ist."""
+def ausschnitt_pruefen(wert):
+    """'0.1,0.2,0.5,0.3' (x, y, Breite, Höhe als Anteil des gedrehten Bildes) -> Tupel oder None."""
+    try:
+        x, y, b, h = (float(t) for t in (wert or '').split(','))
+    except ValueError:
+        return None
+    if not (0 <= x < 1 and 0 <= y < 1 and 0 < b <= 1 and 0 < h <= 1):
+        return None
+    return x, y, min(b, 1 - x), min(h, 1 - y)
+
+
+def ansicht(daten, drehung=0, kante=ANZEIGE_KANTE, ausschnitt=None):
+    """Foto gedreht und verkleinert als JPEG - (bytes, mimetype). None, wenn es kein Bild ist.
+    ausschnitt: nur dieser Teil (siehe ausschnitt_pruefen), z. B. die Zeile, aus der ein Vorschlag stammt."""
     if Image is None:
         return None
     try:
@@ -162,6 +174,12 @@ def ansicht(daten, drehung=0, kante=ANZEIGE_KANTE):
         grund = Image.new('RGB', bild.size, 'white')
         grund.paste(bild.convert('RGBA'), mask=bild.convert('RGBA').getchannel('A'))
         bild = grund
+    teil = ausschnitt_pruefen(ausschnitt) if isinstance(ausschnitt, str) else ausschnitt
+    if teil:
+        x, y, b, h = teil
+        w0, h0 = bild.size
+        bild = bild.crop((int(x * w0), int(y * h0), max(int(x * w0) + 1, int((x + b) * w0)),
+                          max(int(y * h0) + 1, int((y + h) * h0))))
     bild.thumbnail((kante, kante), Image.LANCZOS)
     puffer = io.BytesIO()
     bild.save(puffer, 'JPEG', quality=88)

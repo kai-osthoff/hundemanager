@@ -151,6 +151,14 @@ Programm passiert erst nach einer geprüften Sicherung.**
   Impfungen zu (`IMPFSTOFFE`, Kombi-Impfstoffe decken mehrere ab) und liefert die Beschreibung („L – Leptospirose“).
   Neuer Impfstoff = Zeile dort. „verw. bis“/„Exp.“ auf dem Aufkleber ist das Verfallsdatum des Impfstoffs, nie die
   Gültigkeit der Impfung. Plan für die Foto-Erkennung: `docs/superpowers/specs/2026-10-08-heimtierausweis-erkennung-design.md`.
+- **Erkennung von Impfpass-Fotos** (`erkennung.py`, erster Entwurf): RapidOCR lokal (kein Cloud-Dienst), optional –
+  fehlt es, läuft alles ohne Vorschläge. Wir können nicht beeinflussen, was Halter fotografieren: deshalb nur über
+  **Merkmale** (Überschriften/Beschriftungen in `SEITEN`/`FELDER`, Englisch zählt überall), nie über feste Positionen.
+  Werte nur im Feld unter ihrer Beschriftung; Plausibilität (gültig bis passend nach Impfdatum) entscheidet
+  sicher/unsicher; unsichere Zeilen werden nie vorausgefüllt, nur mit Bildausschnitt gezeigt (Knopf „Übernehmen“).
+  Ein späteres unsicheres Datum verhindert einen veralteten Vorschlag (`offen`). Von der Besitzerseite wird nichts
+  übernommen. `Nachweis.erkennung` speichert nur je Feld übernommen/geändert/geleert – Grundlage für weitere Iterationen.
+  Tests: `auswerten()` mit erfundenen Textblöcken; echte Pass-Fotos nur lokal messen, nie ins Repo.
 - Fällige Impfungen (abgelaufen oder innerhalb `ERINNERUNG_VORLAUF`) stehen in `/nachweise`
   mit WhatsApp-Nachfrage (`whatsapp.impfpass_nachricht`), Grundlage sind die Daten am Hund.
 
