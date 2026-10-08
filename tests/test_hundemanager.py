@@ -1223,6 +1223,37 @@ class WhatsAppOberflaecheTests(unittest.TestCase):
         self.assertNotIn('von Jürgen Müller', html_unescape(urllib.parse.unquote(seite)))
 
 
+class PassnummerTests(unittest.TestCase):
+    """Nummer des EU-Heimtierausweises am Hund - erfundene Nummern, nie echte."""
+
+    setUp = HaftpflichtOberflaecheTests.setUp
+    tearDown = HaftpflichtOberflaecheTests.tearDown
+    oeffne = HaftpflichtOberflaecheTests.oeffne
+
+    def hund_speichern(self, hund_id, **felder):
+        werte = {'name': 'Bello', 'geburtstag': '2020-01-01'}
+        werte.update(felder)
+        return self.oeffne(f'/hund/{hund_id}/bearbeiten', urllib.parse.urlencode(werte).encode()).decode('utf-8')
+
+    def test_passnummer_speichern_anzeigen_exportieren(self):
+        # Die Test-Datenbank hat noch keine Spalte passnummer - die Migration ergänzt sie
+        self.assertIn('Hund &#34;Bello&#34; wurde aktualisiert', self.hund_speichern(1, passnummer=' de12 345-6789 '))
+        with closing(sqlite3.connect(self.db)) as v:
+            self.assertEqual(v.execute('SELECT passnummer FROM hund WHERE id = 1').fetchone(), ('DE123456789',))
+        self.assertIn('value="DE12 3456789"', self.oeffne('/hund/1/bearbeiten').decode('utf-8'))
+        self.assertIn('Pass DE12 3456789', self.oeffne('/').decode('utf-8'))
+
+        import openpyxl
+        zeilen = list(openpyxl.load_workbook(io.BytesIO(self.oeffne('/export/excel'))).active.iter_rows(values_only=True))
+        self.assertEqual(zeilen[0][13], 'Passnummer')
+        self.assertIn(('Bello', 'DE12 3456789'), [(z[3], z[13]) for z in zeilen[1:]])
+
+        # Leeres Feld entfernt die Nummer wieder
+        self.hund_speichern(1, passnummer='  ')
+        with closing(sqlite3.connect(self.db)) as v:
+            self.assertEqual(v.execute('SELECT passnummer FROM hund WHERE id = 1').fetchone(), (None,))
+
+
 class MailtoTests(unittest.TestCase):
     """mailto:-Links: Empfänger, Betreff und Text so codiert, dass GMX MailCheck sie übernimmt."""
 

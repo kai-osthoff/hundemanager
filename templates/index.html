@@ -124,7 +124,7 @@
                 <div class="avatar" aria-hidden="true">{{ hund.name[:1]|upper }}</div>
                 <div class="hund-name">
                     <h4><a href="{{ url_for('hund_nachweise', hund_id=hund.id) }}" class="karte-link">{{ hund.name }}</a></h4>
-                    <div>{% if hund.geburtstag %}geb. {{ hund.geburtstag|format_datum }}{% else %}Geburtstag unbekannt{% endif %}</div>
+                    <div>{% if hund.geburtstag %}geb. {{ hund.geburtstag|format_datum }}{% else %}Geburtstag unbekannt{% endif %}{% if hund.passnummer %} · Pass {{ hund.passnummer|passnummer }}{% endif %}</div>
                 </div>
                 <span class="gesamt gesamt-{{ h.gesamt }}">{{ h.gesamt_text }}</span>
                 <details class="menue menue-rechts">

@@ -16,6 +16,12 @@
             <label for="geburtstag">Geburtstag</label>
             <input type="date" id="geburtstag" name="geburtstag" value="{{ hund.geburtstag.strftime('%Y-%m-%d') if hund and hund.geburtstag else '' }}">
         </div>
+
+        <div class="form-group">
+            <label for="passnummer">Passnummer (Heimtierausweis)</label>
+            <input type="text" id="passnummer" name="passnummer" placeholder="z. B. DE12 3456789" value="{{ hund.passnummer|passnummer if hund else '' }}">
+            <small style="color: #6c757d;">Steht unten auf jeder Seite des EU-Heimtierausweises.</small>
+        </div>
         
         <div class="form-group">
             <label for="gueltig_shp_dap_dhp">Gültigkeit SHP/DAP/DHP</label>

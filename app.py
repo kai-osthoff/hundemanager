@@ -122,6 +122,7 @@ class Hund(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     geburtstag = db.Column(db.Date, nullable=True)
+    passnummer = db.Column(db.String(30), nullable=True)  # EU-Heimtierausweis, normalisiert (DE123456789)
     gueltig_shp_dap_dhp = db.Column(db.Date, nullable=True)
     gueltig_l = db.Column(db.Date, nullable=True)
     gueltig_bbpi = db.Column(db.Date, nullable=True)
@@ -370,6 +371,20 @@ def iso_datum(wert):
 # Jinja2 Filter registrieren
 app.jinja_env.filters['format_datum'] = format_datum
 app.jinja_env.filters['iso_datum'] = iso_datum
+
+
+def passnummer_normalisieren(text):
+    """'de12 345-6789' -> 'DE123456789'; leer -> None. Format bewusst nicht erzwungen (Ausland)."""
+    wert = re.sub(r'[\s\-./]', '', text or '').upper()
+    return wert[:30] or None
+
+
+def passnummer_anzeige(wert):
+    """'DE123456789' -> 'DE12 3456789' (so steht sie im Pass)."""
+    return f'{wert[:4]} {wert[4:]}' if wert and len(wert) > 4 else (wert or '')
+
+
+app.jinja_env.filters['passnummer'] = passnummer_anzeige
 app.jinja_env.globals['get_status'] = get_status
 
 IMPFUNGEN = [
@@ -670,6 +685,7 @@ def hund_neu(person_id):
         hund = Hund(
             name=name,
             geburtstag=parse_datum(request.form.get('geburtstag')),
+            passnummer=passnummer_normalisieren(request.form.get('passnummer')),
             gueltig_shp_dap_dhp=parse_datum(request.form.get('gueltig_shp_dap_dhp')),
             gueltig_l=parse_datum(request.form.get('gueltig_l')),
             gueltig_bbpi=parse_datum(request.form.get('gueltig_bbpi')),
@@ -698,6 +714,7 @@ def hund_bearbeiten(hund_id):
         
         hund.name = name
         hund.geburtstag = parse_datum(request.form.get('geburtstag'))
+        hund.passnummer = passnummer_normalisieren(request.form.get('passnummer'))
         hund.gueltig_shp_dap_dhp = parse_datum(request.form.get('gueltig_shp_dap_dhp'))
         hund.gueltig_l = parse_datum(request.form.get('gueltig_l'))
         hund.gueltig_bbpi = parse_datum(request.form.get('gueltig_bbpi'))
@@ -1223,7 +1240,7 @@ def export_excel():
     )
     
     # Header
-    headers = ['Nachname', 'Vorname', 'Foto', 'Hundename', 'Geburtstag', 'SHP/DAP/DHP', 'L', 'BbPi', 'T', 'Haftpflicht', 'Bemerkung', 'Handynummer', 'E-Mail']
+    headers = ['Nachname', 'Vorname', 'Foto', 'Hundename', 'Geburtstag', 'SHP/DAP/DHP', 'L', 'BbPi', 'T', 'Haftpflicht', 'Bemerkung', 'Handynummer', 'E-Mail', 'Passnummer']
     for col, header in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col, value=header)
         cell.fill = header_fill
@@ -1292,10 +1309,11 @@ def export_excel():
             ws.cell(row=row, column=11, value=hund.bemerkung or '').border = thin_border
             ws.cell(row=row, column=12, value=person.mobil or '').border = thin_border
             ws.cell(row=row, column=13, value=person.email or '').border = thin_border
+            ws.cell(row=row, column=14, value=passnummer_anzeige(hund.passnummer)).border = thin_border
             row += 1
     
     # Spaltenbreiten anpassen
-    column_widths = [15, 15, 18, 20, 12, 15, 12, 12, 12, 18, 30, 18, 28]
+    column_widths = [15, 15, 18, 20, 12, 15, 12, 12, 12, 18, 30, 18, 28, 16]
     for i, width in enumerate(column_widths, 1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = width
     
