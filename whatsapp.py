@@ -74,6 +74,19 @@ def impfpass_nachricht(vorname, hundename, punkte, kanal='whatsapp'):
     return '\n'.join(zeilen)
 
 
+def impfpass_foto_nachricht(vorname, hundename, punkte, kanal='whatsapp'):
+    """Bitte um ein neues Foto, wenn ein eingeschicktes Foto vom Impfpass nicht brauchbar ist."""
+    zeilen = [f'Hallo {vorname},', '',
+              f'danke für die Fotos vom Impfpass von {hundename}! Mir fehlt leider noch etwas:']
+    zeilen += [f'• {p}' for p in punkte]
+    zeilen += ['', f'Kannst du mir die Seite bitte noch einmal {ANTWORT_WEG[kanal]} schicken? Am besten so:',
+               '• die ganze Seite gerade von oben fotografieren',
+               '• alle vier Ecken sichtbar, nichts abgeschnitten',
+               '• gutes Licht, ohne Spiegelung, scharf gestellt',
+               '', 'Danke und viele Grüße', ABSENDER]
+    return '\n'.join(zeilen)
+
+
 def _aufzaehlung(namen):
     """['Bello', 'Luna', 'Rex'] -> 'Bello, Luna und Rex'."""
     return ', '.join(namen[:-1]) + ' und ' + namen[-1] if len(namen) > 1 else ''.join(namen)

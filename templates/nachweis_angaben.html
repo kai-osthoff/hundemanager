@@ -42,6 +42,8 @@
     .impf-zeile .quelle, .impf-zeile .offen { grid-column: 1 / -1; font-size: 0.8rem; }
     .impf-zeile .offen { color: #7A4A00; font-weight: 600; }
     .unsicher-liste { margin-top: 14px; }
+    .foto-maengel ul { margin: 6px 0 6px 18px; }
+    .foto-maengel .zeile { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
     .unsicher-liste li { list-style: none; border-top: 1px solid #E2E8E4; padding: 8px 0; font-size: 0.85rem; }
     .impfstoff-tabelle { margin-top: 12px; font-size: 0.85rem; }
     .impfstoff-tabelle summary { cursor: pointer; font-weight: 600; }
@@ -132,6 +134,29 @@
                             {% else %}<span class="offen">⚠ bei {{ hund.name }} steht {{ hund.geburtstag|format_datum }}</span>{% endif %}
                         </div>
                         {% endif %}
+                    {% endif %}
+                </div>
+                {% endif %}
+                {% if erkannt_fotos and (erkannt_fotos.maengel or erkannt_fotos.folgeseiten) %}
+                <div class="flash error foto-maengel">
+                    {% if erkannt_fotos.maengel %}<strong>Nicht alle Fotos sind brauchbar</strong>{% endif %}
+                    <ul>
+                    {% for m in erkannt_fotos.maengel %}
+                        <li>Foto {{ m.foto }}{% if m.seite %} ({{ m.seite }}){% endif %} {{ m.gruende|join(' und ') }}</li>
+                    {% endfor %}
+                    {% for f in erkannt_fotos.folgeseiten %}
+                        <li>Auf „{{ f.abschnitt }}“{% if f.bis_seite %} (bis Seite {{ f.bis_seite }}/32){% endif %} ist jede Zeile
+                            ausgefüllt – neuere Impfungen könnten auf der nächsten Seite stehen.</li>
+                    {% endfor %}
+                    </ul>
+                    {% if foto_nachfrage.whatsapp or foto_nachfrage.email %}
+                    <div class="zeile">Neues Foto bei {{ hund.besitzer.vollstaendiger_name }} anfordern:
+                        {% set wv = url_for('wiedervorlage_speichern', hund_id=hund.id) %}
+                        {% if foto_nachfrage.whatsapp %}<a data-wiedervorlage-link="{{ hund.id }}" data-wiedervorlage-url="{{ wv }}" href="{{ foto_nachfrage.whatsapp }}" target="whatsapp" rel="noopener" class="knopf">WhatsApp</a>{% endif %}
+                        {% if foto_nachfrage.email %}<a data-wiedervorlage-link="{{ hund.id }}" data-wiedervorlage-url="{{ wv }}" href="{{ foto_nachfrage.email }}" class="knopf">E-Mail</a>{% endif %}
+                    </div>
+                    {% else %}
+                    <div>Für eine Nachfrage fehlen Handynummer und E-Mail-Adresse von {{ hund.besitzer.vollstaendiger_name }}.</div>
                     {% endif %}
                 </div>
                 {% endif %}

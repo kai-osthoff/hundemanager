@@ -7,7 +7,7 @@ const {test} = require('node:test');
 const code = fs.readFileSync(path.join(__dirname, '..', 'static', 'wiedervorlage.js'), 'utf8');
 
 function umgebung(vorher = {}, antwort = async () => ({ok: true, json: async () => (
-    {datum: '20.10.2026', datum_iso: '2026-10-20', faellig: false})}), uebersicht = false) {
+    {datum: '20.10.2026', datum_iso: '2026-10-20', faellig: false})}), uebersicht = false, ohneKarte = false) {
     let jetzt = 0;
     let tick;
     let daten = JSON.stringify(vorher);
@@ -29,12 +29,13 @@ function umgebung(vorher = {}, antwort = async () => ({ok: true, json: async () 
         datum: '2026-10-10', standard: '2026-10-22'});
     karte.querySelector = name => felder[name];
     karte.querySelectorAll = () => Object.values(felder);
-    const links = [element({wiedervorlageLink: '1'}), element({wiedervorlageLink: '1'})];
+    const links = [element({wiedervorlageLink: '1', wiedervorlageUrl: '/hund/1/wiedervorlage'}),
+        element({wiedervorlageLink: '1'})];
     const context = {
         document: {
             getElementById: () => element({wartezeit: '30'}),
             querySelector: () => uebersicht ? element() : null,
-            querySelectorAll: name => name === '[data-wiedervorlage]' ? [karte] : links,
+            querySelectorAll: name => name === '[data-wiedervorlage]' ? (ohneKarte ? [] : [karte]) : links,
         },
         sessionStorage: {getItem: () => daten, setItem: (_, wert) => {daten = wert;}},
         Date: {now: () => jetzt},
@@ -260,4 +261,15 @@ test('Neuladen erhält einen manuellen Löschfehler bis zur bewussten Wiederholu
     assert.equal(u.aufrufe.length, 2);
     await u.klick('loeschen');
     assert.equal(u.neuladen(), 1);
+});
+
+test('Nachfrage aus dem Impfpass-Dialog (ohne Hundekarte) startet die Wiedervorlage trotzdem', async () => {
+    const u = umgebung(undefined, undefined, false, true);
+    u.links[0].events.click();
+    assert.deepEqual(Object.keys(u.daten()), ['1']);
+    assert.equal(u.daten()['1'].url, '/hund/1/wiedervorlage');
+    u.warten(30000);
+    await fertig();
+    assert.equal(u.aufrufe.length, 1);
+    assert.equal(u.aufrufe[0].url, '/hund/1/wiedervorlage');
 });

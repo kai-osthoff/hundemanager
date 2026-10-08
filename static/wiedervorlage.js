@@ -150,9 +150,15 @@
             const id = link.dataset.wiedervorlageLink;
             const karte = karten.get(id);
             if (laufend.has(id)) return;
-            editorSchliessen(karte);
-            karte.querySelector('[data-wiedervorlage-fehler]').hidden = true;
-            offen[id] = {ende: Date.now() + wartezeit * 1000, dauer: wartezeit * 1000, url: karte.dataset.url};
+            if (karte) {
+                editorSchliessen(karte);
+                karte.querySelector('[data-wiedervorlage-fehler]').hidden = true;
+            }
+            // Ohne Hundekarte (z. B. im Impfpass-Dialog) bringt der Link die Adresse selbst mit;
+            // der Countdown läuft auf der nächsten Seite weiter
+            const url = karte ? karte.dataset.url : link.dataset.wiedervorlageUrl;
+            if (!url) return;
+            offen[id] = {ende: Date.now() + wartezeit * 1000, dauer: wartezeit * 1000, url};
             speichernStatus();
             aktualisieren();
             beiBedarfNeuLaden();

@@ -761,10 +761,28 @@ def hund_nachweise(hund_id):
 MAX_DATEIEN = 10  # je Upload - ein Impfpass hat selten mehr beschriebene Seiten
 
 
+def foto_nachfrage(hund, maengel, kanal='whatsapp'):
+    """WhatsApp- bzw. E-Mail-Link: Bitte um ein neues Foto, wenn eingeschickte Fotos nicht brauchbar
+    sind oder eine Folgeseite fehlen könnte (maengel: Ergebnis von erkennung.zusammenfassen) -
+    None ohne Handynummer bzw. Adresse."""
+    punkte = [f'Foto {m["foto"]}' + (f' ({m["seite"]})' if m.get('seite') else '') + ' ' + ' und '.join(m['gruende'])
+              for m in maengel.get('maengel', [])]
+    punkte += [f'Gibt es nach „{f["abschnitt"]}“' + (f' Seite {f["bis_seite"]}/32' if f.get('bis_seite') else '')
+               + ' noch eine Seite mit neueren Impfungen? Dann schick mir bitte auch davon ein Foto.'
+               for f in maengel.get('folgeseiten', [])]
+    text = whatsapp.impfpass_foto_nachricht(hund.besitzer.ansprache, hund.name, punkte, kanal)
+    if kanal == 'email':
+        return mailto.link(hund.besitzer.email, f'{hund.name}: Foto vom Impfpass', text)
+    return whatsapp.link(hund.besitzer.mobil, text)
+
+
 def _angaben_seite(hund, nachweis, art, vorschlag, seiten, warnungen=(), text_erkannt=False, erkannt_fotos=None):
     """Dialog zum Prüfen/Eintragen der Angaben - mit den Fotos daneben."""
+    erk = erkannt_fotos or {}
+    nachfrage = {k: foto_nachfrage(hund, erk, k) for k in ('whatsapp', 'email')} \
+        if erk.get('maengel') or erk.get('folgeseiten') else {}
     return render_template('nachweis_angaben.html', hund=hund, nachweis=nachweis, art=art,
-                           erkannt_fotos=erkannt_fotos, impf_info=impfstoffe.IMPFUNG_INFO,
+                           erkannt_fotos=erkannt_fotos, impf_info=impfstoffe.IMPFUNG_INFO, foto_nachfrage=nachfrage,
                            art_info=NACHWEIS_ARTEN[art], impfungen_auswahl=[n for n, _ in IMPFUNGEN],
                            impfungen=hund_ansicht(hund)['impfungen'], vorschlag=vorschlag,
                            warnungen=list(warnungen), seiten=seiten, text_erkannt=text_erkannt,
@@ -807,7 +825,10 @@ def nachweis_hochladen(hund_id):
         seiten.append({'sha256': sha256, 'endung': endung, 'original_name': name, 'drehung': drehung,
                        'ecken': ','.join(map(str, ecken)) if ecken else ''})
         if art == 'impfpass' and endung != 'pdf' and erkennung.verfuegbar():
-            ergebnisse.append(erkennung.foto_auswerten(daten, drehung))
+            ergebnis = erkennung.foto_auswerten(daten, drehung)
+            if ergebnis:
+                seiten[-1]['drehung'] = ergebnis['drehung']  # dort hat die Erkennung die Seite gefunden
+            ergebnisse.append(ergebnis)
 
     vorschlag = {'eingereicht_von': hund.besitzer.vollstaendiger_name}
     warnungen = []

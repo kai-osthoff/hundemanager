@@ -162,6 +162,12 @@ Programm passiert erst nach einer geprüften Sicherung.**
   Ein späteres unsicheres Datum verhindert einen veralteten Vorschlag (`offen`). Von der Besitzerseite wird nichts
   übernommen. `Nachweis.erkennung` speichert nur je Feld übernommen/geändert/geleert – Grundlage für weitere Iterationen.
   Tests: `auswerten()` mit erfundenen Textblöcken; echte Pass-Fotos nur lokal messen, nie ins Repo.
+- **Unbrauchbare Fotos** (`erkennung.maengel`): unscharf (`UNSCHARF`), keine Passseite erkannt, Impfseite ohne
+  Seitenfuß „Seite / Page n/32“ oder mit Impfzeile am Bildrand (abgeschnitten). Sind auf den Fotos alle Zeilen eines
+  Abschnitts ausgefüllt, stehen neuere Impfungen vielleicht auf der Folgeseite (`folgeseiten`). Der Dialog bietet dann
+  WhatsApp/E-Mail an den Halter (`whatsapp.impfpass_foto_nachricht`); `data-wiedervorlage-url` startet die
+  Wiedervorlage auch ohne Hundekarte. Findet die Erkennung in der geschätzten Drehung nichts oder liegt die Seite
+  kopfüber (Überschrift unten), probiert sie die anderen Drehungen und übernimmt die passende.
 - Fällige Impfungen (abgelaufen oder innerhalb `ERINNERUNG_VORLAUF`) stehen in `/nachweise`
   mit WhatsApp-Nachfrage (`whatsapp.impfpass_nachricht`), Grundlage sind die Daten am Hund.
 

@@ -70,6 +70,13 @@ _MIN_GUELTIG = relativedelta(days=28)
 _MAX_GUELTIG = relativedelta(years=3, days=31)
 _MAX_ZUKUNFT = relativedelta(years=5)
 
+_SEITENZAHL = re.compile(r'(?:seite|page)\D{0,8}?(\d{1,2})\s*/\s*(\d{2})')
+UNSCHARF = 30.0          # Laplace-Varianz bei 1600 px: scharfe Handyfotos 900-2500, unlesbar unter 10
+SEITEN_NAMEN = {'besitzer': 'Angaben zum Besitzer', 'beschreibung': 'Beschreibung des Tieres',
+                'kennzeichnung': 'Kennzeichnung des Tieres', 'ausstellung': 'Ausstellung des Ausweises',
+                'tollwut': 'Tollwutimpfung', 'titer': 'Tollwut-Antikörpertest', 'parasiten': 'Parasitenbehandlung',
+                'impfungen': 'Sonstige Impfungen', 'untersuchung': 'Klinische Untersuchung'}
+
 _PASS_GANZ = re.compile(r'^([A-Z]{2}\d{2})(\d{6,9})$')
 _PASS_LAND = re.compile(r'^[A-Z]{2}\d{2}$')
 _PASS_ZAHL = re.compile(r'^\d{6,9}$')
@@ -267,6 +274,9 @@ def _impfzeile(label, alle_labels, werte, aufkleber_bloecke, breite, hoehe, ist_
     box = (max(0.0, x0 / breite), max(0.0, (label.y0 - 0.6 * h) / hoehe),
            min(1.0, (spalte[1] - x0) / breite), min(1.0, (ende - label.y0 + 2.1 * h) / hoehe))  # Handschrift ragt nach unten
     return {
+        # Unter der Zeile hört das Foto auf: die Seite geht über den Bildrand hinaus
+        'am_rand': not darunter and label.y0 + 8 * h > hoehe,
+        'abschnitt': 'tollwut' if ist_tollwut else 'impfungen',
         'felder': [f for f in impfstoffe.IMPFUNG_INFO if f in felder],
         'impfstoffe': namen,
         'impfdatum': impfdatum.isoformat() if impfdatum else None,
@@ -319,7 +329,7 @@ def auswerten(bloecke, breite, hoehe, nachlesen=None, heute=None):
     label_bloecke = {id(b) for _, b in labels}
     werte = [b for b in bloecke if id(b) not in label_bloecke]
 
-    zeilen = []
+    zeilen, freie_zeilen, angeschnitten = [], Counter(), False
     for art, label in sorted(labels, key=lambda ab: (ab[1].y0, ab[1].x0)):
         if art != 'impfdatum':
             continue
@@ -327,11 +337,25 @@ def auswerten(bloecke, breite, hoehe, nachlesen=None, heute=None):
         if seite not in IMPF_SEITEN:
             continue
         zeile = _impfzeile(label, labels, werte, werte, breite, hoehe, seite == 'tollwut', heute, nachlesen)
+        angeschnitten = angeschnitten or zeile.pop('am_rand')
         if zeile['impfstoffe'] or zeile['impfdatum'] or zeile['gueltig_bis']:
             zeilen.append(zeile)  # leere Zeilen des Passes nicht melden
+        elif not angeschnitten:
+            freie_zeilen[zeile['abschnitt']] += 1
 
     pass_kandidaten = _passnummer(bloecke, breite, hoehe)
+    # "Seite / Page 22/32" steht unten auf jeder Passseite - fehlt er, ist die Seite meist abgeschnitten
+    fuesse = [b for b in bloecke for t in [_SEITENZAHL.search(b.text.lower())]
+              if t and 0 < int(t.group(1)) <= int(t.group(2))]
+    seitenzahlen = sorted({int(_SEITENZAHL.search(b.text.lower()).group(1)) for b in fuesse})
+    koepfe = [b for seite, gewicht, b in ueberschriften if gewicht >= 2]
     return {
+        # Lage von Überschrift (oben) und Seitenfuß (unten) - umgekehrt liegt das Foto auf dem Kopf
+        'lage': {'kopf': round(min(_mitte(b)[1] for b in koepfe) / hoehe, 3) if koepfe else None,
+                 'fuss': round(max(_mitte(b)[1] for b in fuesse) / hoehe, 3) if fuesse else None},
+        'seitenzahlen': seitenzahlen,
+        'freie_zeilen': dict(freie_zeilen),
+        'angeschnitten': angeschnitten,
         'seiten': sorted(s for s, p in punkte.items() if p >= 2),
         'passnummer': Counter(pass_kandidaten).most_common(1)[0][0] if pass_kandidaten else None,
         'geburtstag': _geburtstag(labels, werte, ueberschriften, breite, heute),
@@ -339,18 +363,54 @@ def auswerten(bloecke, breite, hoehe, nachlesen=None, heute=None):
     }
 
 
+def kopfueber(ergebnis):
+    """Liegt das Foto auf dem Kopf? Die Texterkennung liest Zeilen auch umgedreht - dann steht aber
+    die oberste Überschrift unten bzw. der unterste Seitenfuß oben. Großzügige Grenzen: bei einer
+    Doppelseite steht der Fuß der oberen Seite in der Bildmitte."""
+    lage = ergebnis.get('lage') or {}
+    return (lage.get('kopf') is not None and lage['kopf'] > 0.6) or (lage.get('fuss') is not None and lage['fuss'] < 0.3)
+
+
+def maengel(ergebnis):
+    """Warum ein Foto nicht brauchbar ist (für die Bitte um ein neues Foto) - leere Liste: alles gut."""
+    if ergebnis.get('schaerfe') is not None and ergebnis['schaerfe'] < UNSCHARF:
+        return ['ist unscharf']  # alles Weitere (nichts lesbar) folgt nur daraus
+    gruende = []
+    impfseite = ergebnis['zeilen'] or {'tollwut', 'impfungen'} & set(ergebnis['seiten'])
+    if not ergebnis['seiten'] and not ergebnis['zeilen']:
+        gruende.append('darauf ist keine Seite des Heimtierausweises zu erkennen')
+    elif impfseite and (not ergebnis.get('seitenzahlen') or ergebnis.get('angeschnitten')):
+        gruende.append('ist nicht vollständig – ein Teil der Seite fehlt')
+    return gruende
+
+
+def _seite_beschreiben(ergebnis):
+    namen = [SEITEN_NAMEN[s] for s in ergebnis['seiten'] if s in SEITEN_NAMEN]
+    zahlen = ', '.join(f'{z}/32' for z in ergebnis.get('seitenzahlen', []))
+    if namen:
+        return '„' + '“, „'.join(namen) + '“' + (f' (Seite {zahlen})' if zahlen else '')
+    return f'Seite {zahlen}' if zahlen else ''
+
+
 def zusammenfassen(ergebnisse):
     """Ergebnisse mehrerer Fotos (None = nicht ausgewertet) -> ein Vorschlag für den Dialog."""
     seiten, zeilen, paesse, geburtstag = set(), [], Counter(), None
-    vorschlag = {}
+    vorschlag, fotomaengel = {}, []
+    frei, letzte_seite = Counter(), {}
     for nr, e in enumerate(ergebnisse):
         if not e:
             continue
+        gruende = maengel(e)
+        if gruende:
+            fotomaengel.append({'foto': nr + 1, 'seite': _seite_beschreiben(e), 'gruende': gruende})
         seiten.update(e['seiten'])
         if e['passnummer']:
             paesse[e['passnummer']] += 1
         geburtstag = geburtstag or e['geburtstag']
+        frei.update(e.get('freie_zeilen', {}))
         for z in e['zeilen']:
+            if e.get('seitenzahlen'):
+                letzte_seite[z['abschnitt']] = max(letzte_seite.get(z['abschnitt'], 0), max(e['seitenzahlen']))
             zeilen.append(dict(z, seite=nr))
             if z['sicher']:
                 for feld in z['felder']:
@@ -363,9 +423,14 @@ def zusammenfassen(ergebnisse):
                     if z['gueltig_bis'] > vorschlag.get(f, '')})
     for feld in offen:
         vorschlag.pop(feld, None)
+    # Jede Zeile eines Abschnitts ausgefüllt: neuere Impfungen stehen vielleicht auf der Folgeseite
+    folgeseiten = [{'abschnitt': SEITEN_NAMEN[a], 'bis_seite': letzte_seite.get(a)}
+                   for a in sorted({z['abschnitt'] for z in zeilen}) if not frei[a]]
     return {
         'erkannt': bool(seiten or zeilen),
         'offen': offen,
+        'maengel': fotomaengel,
+        'folgeseiten': folgeseiten,
         'seiten': sorted(seiten),
         'vorschlag': vorschlag,
         'passnummer': paesse.most_common(1)[0][0] if paesse else None,
@@ -419,10 +484,33 @@ def _lesen(bild_bytes):
     return bloecke
 
 
+def _schaerfe(bild):
+    """Laplace-Varianz bei 1600 px Kantenlänge - je kleiner, desto unschärfer."""
+    import cv2
+    import numpy
+    klein = bild.copy()
+    klein.thumbnail((1600, 1600))
+    return round(float(cv2.Laplacian(numpy.array(klein.convert('L')), cv2.CV_64F).var()), 1)
+
+
 def foto_auswerten(daten, drehung=0):
-    """Foto eines Nachweises -> Ergebnis von auswerten() oder None (kein Bild, keine OCR, Fehler)."""
+    """Foto eines Nachweises -> Ergebnis von auswerten() (mit 'drehung') oder None (kein Bild, keine OCR,
+    Fehler). Findet die Erkennung in der geschätzten Drehung nichts, probiert sie die anderen: erkannte
+    Überschriften und Beschriftungen sind ein sicherer Hinweis als die Schätzung in bilder.py."""
     if not verfuegbar():
         return None
+    ergebnis = None
+    for versuch in (drehung, drehung + 180, drehung + 90, drehung + 270):
+        neu = _foto_auswerten(daten, versuch % 360)
+        if neu is None:
+            return ergebnis
+        if (neu['seiten'] or neu['zeilen']) and not kopfueber(neu):
+            return neu
+        ergebnis = ergebnis or neu
+    return ergebnis
+
+
+def _foto_auswerten(daten, drehung):
     try:
         from PIL import Image
         ansicht = bilder.ansicht(daten, drehung, ANALYSE_KANTE)
@@ -443,7 +531,10 @@ def foto_auswerten(daten, drehung=0):
             return [Block(b.text, x0 + b.x0 / f, y0 + b.y0 / f, x0 + b.x1 / f, y0 + b.y1 / f)
                     for b in _lesen(puffer.getvalue())]
 
-        return auswerten(_lesen(ansicht[0]), breite, hoehe, nachlesen)
+        ergebnis = auswerten(_lesen(ansicht[0]), breite, hoehe, nachlesen)
+        ergebnis['schaerfe'] = _schaerfe(bild)
+        ergebnis['drehung'] = drehung
+        return ergebnis
     except Exception as e:  # Erkennung ist nur ein Vorschlag - nie das Hochladen blockieren
         print(f'Erkennung übersprungen: {e.__class__.__name__}: {e}')
         return None

@@ -106,6 +106,11 @@ def zaehle(pfad):
         return {t: v.execute(f'SELECT COUNT(*) FROM {t}').fetchone()[0] for t in ('person', 'hund')}
 
 
+def html_unescape(text):
+    import html
+    return html.unescape(text)
+
+
 def lies_bytes(pfad):
     with open(pfad, 'rb') as f:
         return f.read()
@@ -237,6 +242,7 @@ def passfoto():
     stift.text((660, 460), '13.12.2025', fill=(20, 30, 140), font=gross)
     stift.text((660, 840), '13.12.2028', fill=(20, 30, 140), font=gross)
     stift.text((330, 1700), 'DE12 3456789', fill=(20, 20, 20), font=gross)
+    stift.text((1050, 1710), 'Seite / Page 10/32', fill=(20, 20, 20), font=klein)
     puffer = io.BytesIO()
     bild.save(puffer, 'JPEG', quality=92)
     return puffer.getvalue()
@@ -1041,6 +1047,7 @@ class HaftpflichtOberflaecheTests(unittest.TestCase):
         self.assertIn('Passnummer: <strong>DE12 3456789</strong>', dialog)
         self.assertRegex(dialog, r'id="impf_gueltig_t" name="impf_gueltig_t"[^>]*value="2028-12-13"')
         self.assertIn('erkannt – bitte prüfen', dialog)
+        self.assertNotIn('Nicht alle Fotos sind brauchbar', dialog)
         ausschnitt = re.search(r'class="ausschnitt"[^>]*src="([^"]+)"', dialog).group(1).replace('&amp;', '&')
         from PIL import Image
         self.assertLess(Image.open(io.BytesIO(self.oeffne(ausschnitt))).size[1], 1900)
@@ -1057,6 +1064,19 @@ class HaftpflichtOberflaecheTests(unittest.TestCase):
             rueckmeldung = json.loads(v.execute('SELECT erkennung FROM nachweis').fetchone()[0])
         self.assertEqual(rueckmeldung['felder'], {'gueltig_t': 'uebernommen'})
         self.assertNotIn('3456789', json.dumps(rueckmeldung))  # keine Inhalte gespeichert
+
+    @unittest.skipUnless(importlib.util.find_spec('rapidocr'), 'RapidOCR ist nicht installiert')
+    def test_unbrauchbares_foto_beim_halter_neu_anfordern(self):
+        werte = urllib.parse.urlencode({'vorname': 'Jürgen', 'nachname': 'Müller', 'mobil': '0171 1234567'}).encode()
+        self.oeffne('/person/1/bearbeiten', werte)
+        koerper, typ = multipart_mehrere([('art', 'impfpass')], [('datei', 'irgendwas.jpg', textfoto('felder'))])
+        dialog = self.oeffne('/hund/1/nachweise/hochladen', koerper, typ).decode('utf-8')
+        self.assertIn('Nicht alle Fotos sind brauchbar', dialog)
+        self.assertIn('Foto 1 darauf ist keine Seite des Heimtierausweises zu erkennen', dialog)
+        link = re.search(r'href="(https://web\.whatsapp\.com/send\?phone=491711234567[^"]*)"', dialog).group(1)
+        text = urllib.parse.unquote(html_unescape(link))
+        self.assertIn('alle vier Ecken sichtbar', text)
+        self.assertIn('data-wiedervorlage-url="/hund/1/wiedervorlage"', dialog)
 
     def test_impfpass_foto_in_derselben_ablage(self):
         foto = b'\xff\xd8\xff\xe0' + b'Impfpass-Foto' * 50
@@ -1288,6 +1308,38 @@ class ErkennungTests(unittest.TestCase):
         self.assertFalse(g['erkannt'])
         self.assertEqual((g['vorschlag'], g['passnummer'], g['zeilen']), ({}, None, []))
 
+    def test_unbrauchbare_fotos_werden_gemeldet(self):
+        gut = self.auswerten(self.sonstige_impfungen())
+        self.assertEqual(gut['seitenzahlen'], [22])
+        self.assertEqual(self.erk.maengel(gut), [])
+        # Unten abgeschnitten: die Seitenzahl im Fuß fehlt
+        ohne_fuss = self.auswerten([b for b in self.sonstige_impfungen() if 'Page' not in b.text])
+        self.assertEqual(self.erk.maengel(ohne_fuss), ['ist nicht vollständig – ein Teil der Seite fehlt'])
+        # Doppelseite unten abgeschnitten: von der zweiten Seite ist nur noch eine Beschriftung zu sehen
+        unten_ab = self.erk.auswerten([b for b in self.sonstige_impfungen() if b.y0 < 2470], 3024, 2470,
+                                      heute=self.HEUTE)
+        self.assertEqual(self.erk.maengel(unten_ab), ['ist nicht vollständig – ein Teil der Seite fehlt'])
+        fremd = self.auswerten([self.b('Rechnung Nr. 4711', 300, 200), self.b('Gesamtbetrag 45,00 EUR', 300, 300)])
+        self.assertEqual(self.erk.maengel(fremd), ['darauf ist keine Seite des Heimtierausweises zu erkennen'])
+        self.assertEqual(self.erk.maengel(dict(gut, schaerfe=4.0)), ['ist unscharf'])
+        g = self.erk.zusammenfassen([gut, ohne_fuss, None])
+        self.assertEqual(g['maengel'], [{'foto': 2, 'seite': '„Sonstige Impfungen“',
+                                         'gruende': ['ist nicht vollständig – ein Teil der Seite fehlt']}])
+
+    def test_alle_zeilen_ausgefuellt_folgeseite_fehlt_vielleicht(self):
+        mit_freier_zeile = self.erk.zusammenfassen([self.auswerten(self.sonstige_impfungen())])
+        self.assertEqual(mit_freier_zeile['folgeseiten'], [])
+        voll = [b for b in self.sonstige_impfungen() if b.y0 < 2800]
+        self.assertEqual(self.erk.zusammenfassen([self.auswerten(voll)])['folgeseiten'],
+                         [{'abschnitt': 'Sonstige Impfungen', 'bis_seite': 22}])
+
+    def test_kopfueber_fotografierte_seite_wird_bemerkt(self):
+        bloecke = self.sonstige_impfungen()
+        self.assertFalse(self.erk.kopfueber(self.auswerten(bloecke)))
+        # Gleiche Seite um 180 Grad gedreht: die Texterkennung liest die Zeilen trotzdem, nur liegen sie umgekehrt
+        gedreht = [self.erk.Block(b.text, 3024 - b.x1, 4032 - b.y1, 3024 - b.x0, 4032 - b.y0) for b in bloecke]
+        self.assertTrue(self.erk.kopfueber(self.auswerten(gedreht)))
+
     def test_daten_lesen(self):
         lies = self.erk.datum_lesen
         self.assertEqual(lies('13.12.22'), date(2022, 12, 13))
@@ -1327,6 +1379,14 @@ class WhatsAppTests(unittest.TestCase):
         self.assertNotIn('+', abfrage)  # Leerzeichen als %20, nicht als +
         self.assertEqual(urllib.parse.parse_qs(abfrage)['text'], ['Hallo Zoë,\nImpfung SHP/DAP/DHP & L: 50 %?'])
         self.assertEqual(urllib.parse.parse_qs(abfrage)['phone'], ['491711234567'])
+
+    def test_bitte_um_neues_foto(self):
+        text = self.wa.impfpass_foto_nachricht('Zoë', 'Bello', ['Foto 2 (Seite „Tollwutimpfung“) ist unscharf'])
+        self.assertTrue(text.startswith('Hallo Zoë,'))
+        self.assertIn('• Foto 2 (Seite „Tollwutimpfung“) ist unscharf', text)
+        self.assertIn('alle vier Ecken', text)
+        self.assertIn('als Antwort auf diese E-Mail',
+                      self.wa.impfpass_foto_nachricht('Zoë', 'Bello', ['x'], 'email'))
 
     def test_fotoeinwilligung_nachricht_mit_link(self):
         link = 'https://example.org/formular.pdf'
