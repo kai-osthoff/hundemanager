@@ -913,7 +913,12 @@ class HaftpflichtOberflaecheTests(unittest.TestCase):
 
         # So schickt der Dialog ab: Datei an die gewählte Adresse, die Art kommt vom Knopf
         koerper, typ = multipart_mehrere([('art', 'impfpass')], [('datei', 'impfpass.jpg', textfoto('felder'))])
-        self.assertIn('Impfpass-Nachweis eintragen', self.oeffne('/hund/1/nachweise/hochladen', koerper, typ).decode('utf-8'))
+        dialog = self.oeffne('/hund/1/nachweise/hochladen', koerper, typ).decode('utf-8')
+        self.assertIn('Impfpass-Nachweis eintragen', dialog)
+        # Impfungen mit Beschreibung und Aufkleber-Tabelle statt nur Kürzeln
+        self.assertIn('L – Leptospirose', dialog)
+        self.assertIn('Welcher Aufkleber gehört zu welcher Impfung?', dialog)
+        self.assertIn('<td>Nobivac RL</td><td>T + L</td>', dialog)
         koerper, typ = multipart_mehrere([('art', 'fotoeinwilligung')], [('datei', 'einwilligung.pdf', test_pdf(['Ja']))])
         self.assertIn('Fotoeinwilligung von Jürgen Müller gespeichert',
                       self.oeffne('/person/1/fotoeinwilligung/hochladen', koerper, typ).decode('utf-8'))
@@ -945,7 +950,7 @@ class HaftpflichtOberflaecheTests(unittest.TestCase):
         self.assertIn('<a href="/hund/1/nachweise" class="karte-link">Bello</a>', seite)
         self.assertEqual(len(re.findall(r'<a href="/hund/1/nachweise\?art=impfpass" class="kachel ', seite)), 4)
         self.assertIn('<strong>05/27</strong>', seite)
-        self.assertIn('T: gültig bis 14.05.2027', seite)
+        self.assertIn('T – Tollwut: gültig bis 14.05.2027', seite)
         # Halter-Aktionen stecken in Menüs statt in einer Knopfreihe
         self.assertIn('class="menue', seite)
         self.assertIn('Pausieren</button>', seite)
@@ -1029,6 +1034,41 @@ class HaftpflichtOberflaecheTests(unittest.TestCase):
         self.assertIn('Bitte ein PDF oder ein Foto', seite)
         self.assertFalse(os.path.exists(os.path.join(self.app_dir, 'instance', 'nachweise')))
 
+
+
+class ImpfstoffTests(unittest.TestCase):
+    """Aufkleber im Impfpass -> Impfung. Schreibweisen so, wie die Texterkennung sie liefert."""
+
+    def setUp(self):
+        self.imp = lade_modul(os.path.join(REPO, 'impfstoffe.py'), 'impfstoffe_test')
+
+    def felder(self, text):
+        treffer = self.imp.zuordnen(text)
+        return treffer['felder'] if treffer else None
+
+    def test_aufkleber_aus_dem_heimtierausweis(self):
+        shp, l, bbpi, t = 'gueltig_shp_dap_dhp', 'gueltig_l', 'gueltig_bbpi', 'gueltig_t'
+        for text, erwartet in [
+            ('Nobivac SHP', [shp]), ('NobivacSHP', [shp]), ('Nobivoc SHP', [shp]), ('Nobivac® SHP', [shp]),
+            ('Nobivac® L4', [l]), ('NobivacBbPi', [bbpi]), ('Nobivac® BbPi', [bbpi]), ('Nobivac KC', [bbpi]),
+            ('NobivacT', [t]), ('Nobivar® T', [t]), ('Nobivac RL', [t, l]),
+            ('VERSICAN PIUs DHPPi', [shp]), ('VERSICAN Plus L4', [l]), ('Versican Plus DHPPi/L4R', [shp, l, t]),
+            ('Virbagen® canis L', [l]), ('Virbagen canis SHAPPi/L', [shp, l]),
+            ('Eurican DAPPi-L4', [shp, l]), ('Canigen DHPPi', [shp]), ('Rabisin', [t]),
+        ]:
+            with self.subTest(text):
+                self.assertEqual(sorted(self.felder(text)), sorted(erwartet))
+
+    def test_kein_impfstoff(self):
+        for text in ['verw. bis 05-2026', 'Ch.-B. A150A01', 'Tierärztliche Klinik', 'Gültig bis / Valid until', '', None]:
+            with self.subTest(text):
+                self.assertIsNone(self.felder(text))
+
+    def test_jede_impfung_hat_beschreibung_und_beispiele(self):
+        for feld in ('gueltig_shp_dap_dhp', 'gueltig_l', 'gueltig_bbpi', 'gueltig_t'):
+            info = self.imp.IMPFUNG_INFO[feld]
+            self.assertTrue(info['krankheiten'])
+            self.assertTrue(self.imp.aufkleber_fuer(feld))
 
 
 class WhatsAppTests(unittest.TestCase):

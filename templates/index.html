@@ -143,7 +143,7 @@
             <div class="impf-kacheln">
                 {% for i in h.impfungen %}
                 <a href="{{ url_for('hund_nachweise', hund_id=hund.id, art='impfpass') }}" class="kachel kachel-{{ i.status }}"
-                   title="{{ i.name }}: {% if i.datum %}gültig bis {{ i.datum|format_datum }}{% if i.hinweis %} ({{ i.hinweis }}){% endif %}{% else %}nicht eingetragen – Impfpass hochladen{% endif %}">
+                   title="{{ i.beschreibung }}: {% if i.datum %}gültig bis {{ i.datum|format_datum }}{% if i.hinweis %} ({{ i.hinweis }}){% endif %}{% else %}nicht eingetragen – Impfpass hochladen{% endif %}">
                     <small>{{ i.name.split('/')[0] }}</small>
                     <strong>{{ i.datum.strftime('%m/%y') if i.datum else '+ fehlt' }}</strong>
                 </a>

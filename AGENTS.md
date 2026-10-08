@@ -147,6 +147,10 @@ Programm passiert erst nach einer geprüften Sicherung.**
   neuere Impfung; bei einer Korrektur wird nur zurückgesetzt, was aus diesem Nachweis stammt.
   `gueltig_bis` des Nachweises = früheste Impfung darauf. Daten > 5 Jahre in der Zukunft
   oder vor 2000 werden abgelehnt.
+- **Impfstoffe:** `impfstoffe.py` ordnet Aufkleber (Nobivac SHP, Versican Plus L4, Nobivac RL …) den vier
+  Impfungen zu (`IMPFSTOFFE`, Kombi-Impfstoffe decken mehrere ab) und liefert die Beschreibung („L – Leptospirose“).
+  Neuer Impfstoff = Zeile dort. „verw. bis“/„Exp.“ auf dem Aufkleber ist das Verfallsdatum des Impfstoffs, nie die
+  Gültigkeit der Impfung. Plan für die Foto-Erkennung: `docs/superpowers/specs/2026-10-08-heimtierausweis-erkennung-design.md`.
 - Fällige Impfungen (abgelaufen oder innerhalb `ERINNERUNG_VORLAUF`) stehen in `/nachweise`
   mit WhatsApp-Nachfrage (`whatsapp.impfpass_nachricht`), Grundlage sind die Daten am Hund.
 

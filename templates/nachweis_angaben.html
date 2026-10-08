@@ -28,6 +28,10 @@
     .impf-zeile .bisher .status-cell { padding: 2px 8px; font-size: 0.8rem; }
     .impf-zeile .warnung { grid-column: 1 / -1; font-size: 0.85rem; color: #7A1A13; font-weight: 600; }
     .hilfe { color: #55625A; font-size: 0.85rem; margin-bottom: 8px; }
+    .impfstoff-tabelle { margin-top: 12px; font-size: 0.85rem; }
+    .impfstoff-tabelle summary { cursor: pointer; font-weight: 600; }
+    .impfstoff-tabelle table { border-collapse: collapse; width: 100%; margin-top: 6px; }
+    .impfstoff-tabelle th, .impfstoff-tabelle td { text-align: left; padding: 3px 8px; border-bottom: 1px solid #E2E8E4; }
 </style>
 
 <div class="form-container" style="max-width: 1320px;">
@@ -95,7 +99,7 @@
                     </p>
                     {% for i in impfungen %}
                     <div class="impf-zeile">
-                        <label for="impf_{{ i.feld }}"><strong>{{ i.name }}</strong><small>{{ i.erkennen }}</small></label>
+                        <label for="impf_{{ i.feld }}"><strong>{{ i.beschreibung }}</strong><small>Aufkleber z. B. {{ i.aufkleber }}</small></label>
                         <input type="date" id="impf_{{ i.feld }}" name="impf_{{ i.feld }}" min="2000-01-01"
                                value="{{ vorschlag.get('impf_' ~ i.feld)|iso_datum }}" data-ablauf>
                         <div class="bisher">Beim Hund eingetragen:
@@ -105,6 +109,20 @@
                         <div class="warnung" hidden>Laut Impfpass schon abgelaufen – nach dem Speichern per WhatsApp nachfragen.</div>
                     </div>
                     {% endfor %}
+                    <details class="impfstoff-tabelle">
+                        <summary>Welcher Aufkleber gehört zu welcher Impfung?</summary>
+                        <p class="hilfe"><strong>Achtung:</strong> „verw. bis“ bzw. „Exp.“ auf dem Aufkleber ist das
+                            Verfallsdatum des Impfstoffs – <em>nicht</em>, wie lange die Impfung gilt. Das steht daneben unter
+                            „Gültig bis / Valid until“.</p>
+                        <table>
+                            <thead><tr><th>Aufkleber</th><th>Impfung</th></tr></thead>
+                            <tbody>
+                            {% for marke, zusatz, felder in impfstoff_tabelle %}
+                                <tr><td>{{ marke }} {{ zusatz }}</td><td>{% for f in felder %}{{ impfung_kurz[f] }}{{ ' + ' if not loop.last }}{% endfor %}</td></tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </details>
                     {# Ältere Nachweise hatten nur Häkchen ohne Datum - die bleiben erhalten #}
                     {% for name in vorschlag.get('impfungen_liste', []) %}
                         {% if name in impfungen_auswahl %}<input type="hidden" name="impfungen" value="{{ name }}">{% endif %}

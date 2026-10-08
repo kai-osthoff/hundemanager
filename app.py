@@ -19,6 +19,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from sqlalchemy import event, func, inspect, text #NEU
 import backup
 import bilder
+import impfstoffe
 import mailto
 import nachweise
 import updater
@@ -393,15 +394,6 @@ IMPFUNGEN = [
     ('BbPi', 'gueltig_bbpi'),
     ('T', 'gueltig_t'),
 ]
-# Woran Saskia die Impfung im Impfpass erkennt (Aufkleber des Impfstoffs)
-IMPF_ERKENNEN = {
-    'gueltig_shp_dap_dhp': 'Staupe, Hepatitis, Parvovirose – Aufkleber z. B. Nobivac SHP, DHPPi, '
-                           'Eurican DAPPi, Versican DHPPi',
-    'gueltig_l': 'Leptospirose – Aufkleber z. B. Nobivac L4, Versican L4, Eurican L4',
-    'gueltig_bbpi': 'Zwingerhusten – Aufkleber z. B. Nobivac BbPi / KC',
-    'gueltig_t': 'Tollwut (Rabies) – eigene Seite im EU-Heimtierausweis, Aufkleber z. B. Nobivac T, '
-                 'Rabisin, Rabikal',
-}
 # Ein "gültig bis" weiter in der Zukunft ist sicher ein Tippfehler (Tollwut: bis zu 3 Jahre)
 IMPF_HOECHSTENS = relativedelta(years=5)
 GESAMT_TEXT = {
@@ -426,7 +418,8 @@ def hund_ansicht(hund):
             tage = (datum - heute).days
             hinweis = 'heute' if tage == 0 else ('morgen' if tage == 1 else f'in {tage} Tagen')
         impfungen.append({'name': name, 'feld': feld, 'datum': datum, 'status': status, 'hinweis': hinweis,
-                          'erkennen': IMPF_ERKENNEN[feld]})
+                          'beschreibung': impfstoffe.beschreibung(feld),
+                          'aufkleber': ', '.join(impfstoffe.aufkleber_fuer(feld))})
 
     nachweis = hund.aktueller_nachweis
     if nachweis:
@@ -768,7 +761,8 @@ def _angaben_seite(hund, nachweis, art, vorschlag, seiten, warnungen=(), text_er
                            art_info=NACHWEIS_ARTEN[art], impfungen_auswahl=[n for n, _ in IMPFUNGEN],
                            impfungen=hund_ansicht(hund)['impfungen'], vorschlag=vorschlag,
                            warnungen=list(warnungen), seiten=seiten, text_erkannt=text_erkannt,
-                           heute=date.today().isoformat())
+                           heute=date.today().isoformat(), impfstoff_tabelle=impfstoffe.IMPFSTOFFE,
+                           impfung_kurz={f: i['kurz'] for f, i in impfstoffe.IMPFUNG_INFO.items()})
 
 
 @app.route('/hund/<int:hund_id>/nachweise/hochladen', methods=['POST'])
