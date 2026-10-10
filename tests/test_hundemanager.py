@@ -1429,6 +1429,8 @@ class WhatsAppOberflaecheTests(unittest.TestCase):
         self.assertIn('Handynummer fehlt', seite)
         self.assertNotIn('web.whatsapp.com', seite)
         self.assertIn('Für eine WhatsApp-Nachfrage fehlt die Handynummer', seite)
+        # Fußzeile verlinkt das Projekt auf GitHub
+        self.assertIn('href="https://github.com/kai-osthoff/hundemanager"', seite)
 
         seite = self.person_speichern(1, mobil='0171 12a', email='juergen@example.org')
         self.assertIn('Die Handynummer stimmt so nicht', seite)
