@@ -35,12 +35,13 @@ für die WhatsApp-Nachfrage. Gleiches gilt für Haftpflicht und Geburtstag.
    Muster: Der Betrieb pflegt eine **Liste der Impfarten**, und jede bekommt einen **Pflicht-Schalter**.
    Dieses Muster empfehle ich auch für uns.
 
-**Empfehlung:** In einem ersten kleinen Schritt bekommt jede vorhandene Anforderung in den
-Einstellungen drei Stufen: **Pflicht / Freiwillig / Ausblenden**. Das betrifft die vier Impfungen,
-Haftpflicht, Geburtstag und die Fotoeinwilligung. Dazu kommen fertige **Vorlagen** wie „Rettungshundestaffel“
-oder „Nur Tollwut“. Das geht ohne Änderung am Datenmodell, und für Saskia ändert sich nichts, solange
-sie nichts umstellt. Eine eigene Liste von Impfarten, Gruppen wie Welpen oder Staffel und neue
-Nachweisarten folgen erst, wenn ein zweiter Verein sie wirklich braucht.
+**Empfehlung:** In den Einstellungen gibt es eine Liste aller Impfungen, die die App kennt. Der Verein
+hakt an, welche bei ihm **Pflicht** sind, und das war's. Nur angehakte Impfungen erscheinen auf den
+Karten, machen etwas rot und werden nachgefragt. Für den HSV sind heute alle vier angehakt, für Saskia
+ändert sich also nichts. Im ersten Schritt besteht die Liste aus den vier vorhandenen Impfungen, dafür
+ist kein Umbau der Datenbank nötig. Braucht ein Verein eine Impfung, die nicht auf der Liste steht,
+wird die Liste in einem zweiten Schritt erweitert. Gruppen wie Welpen oder Staffel und neue
+Nachweisarten folgen erst, wenn ein Verein sie wirklich braucht.
 
 ---
 
@@ -115,7 +116,7 @@ verlangt zusätzlich Zwingerhusten. Staffeln können also über ihren Verband hi
 [DRK Dillkreis](https://www.drk-dillenburg.de/fileadmin/user_upload/Seiten/Therapiehunde/Ausbildung_zum_Therapiehunde.pdf)).
 
 **Für die App heißt das:** Die Staffel aus Saskias Beispiel braucht laut Ordnungen
-**SHP + L + T**, aber **kein BbPi**. Die Einstellung „BbPi: Ausblenden“ deckt diesen Fall also schon
+**SHP + L + T**, aber **kein BbPi**. BbPi nicht anzuhaken deckt diesen Fall also schon
 ab. Prüfung, Erste Hilfe und Gesundheitszeugnis wären später neue Einträge in `NACHWEIS_ARTEN`.
 
 ## 3. Fachlicher Hintergrund
@@ -159,48 +160,44 @@ aber ohne Details. Die Vereinssoftware (campai, WISO Mein Verein, S-Verein …) 
 
 ## 5. Plan: So könnten die EINSTELLUNGEN aussehen
 
-### Schritt 1 – „Was verlangt euer Verein?“ (klein, empfohlen als Nächstes)
+### Schritt 1 – „Pflichtimpfungen in unserem Verein“ (klein, empfohlen als Nächstes)
 
-Im Einstellungsdialog kommt ein neuer Abschnitt mit einer Zeile je vorhandener Anforderung und drei
-Knöpfen:
+Im Einstellungsdialog kommt ein neuer Abschnitt mit einem Häkchen je Impfung:
 
 ```
-Was verlangt euer Verein?                 Pflicht   Freiwillig   Ausblenden
-  SHP/DAP/DHP – Staupe, Hepatitis, Parvo     (●)         ( )          ( )
-  L – Leptospirose                           (●)         ( )          ( )
-  BbPi – Zwingerhusten                       (●)         ( )          ( )
-  T – Tollwut                                (●)         ( )          ( )
-  Haftpflicht-Nachweis                       (●)         ( )          ( )
-  Geburtstag                                 (●)         ( )          ( )
-  Einwilligung Fotoaufnahmen                 (●)         ( )          ( )
-
-  Vorlage übernehmen: [HSV Großbottwar (bisher)] [Nur Tollwut]
-                      [Rettungshundestaffel: SHP + L + T] [StIKo-Kern: SHP + L]
+Pflichtimpfungen in unserem Verein
+  [x] SHP/DAP/DHP – Staupe, Hepatitis, Parvovirose
+  [x] L – Leptospirose
+  [x] BbPi – Zwingerhusten
+  [x] T – Tollwut
 
   ⚠ Mit dieser Auswahl hätten 3 Hunde neu Handlungsbedarf, 5 keinen mehr.
 ```
 
-- **Pflicht:** Die Anforderung zählt für die Ampel, für „Handlungsbedarf“, für die Kennzahlen und für
-  die WhatsApp-/E-Mail-Nachfrage. So verhält sich die App heute.
-- **Freiwillig:** Die Anforderung wird angezeigt und eingetragen, die Erkennung füllt sie weiter aus.
-  Sie macht aber nichts rot und wird nicht nachgefragt.
-- **Ausblenden:** Die Anforderung verschwindet aus Karten, Formularen und Nachfragen. **Eingetragene
-  Daten bleiben in der Datenbank** und sind wieder da, sobald man umschaltet.
-- **Standard ist überall „Pflicht“.** Für Saskia ändert sich also nichts, bis sie selbst etwas umstellt.
-- Die Vorschauzeile unten macht sichtbar, was eine Umstellung bewirkt. Die Idee stammt von Time To Pet.
+- **Angehakt = Pflicht.** Die Impfung steht auf den Hundekarten und im Formular, zählt für die Ampel,
+  für „Handlungsbedarf“ und die Kennzahlen und wird per WhatsApp/E-Mail nachgefragt. So verhält sich
+  die App heute.
+- **Nicht angehakt:** Die Impfung verschwindet aus Karten, Formularen und Nachfragen. **Eingetragene
+  Daten bleiben in der Datenbank** und sind wieder da, sobald man sie wieder anhakt.
+- **Standard: alle vier angehakt**, so wie beim HSV heute.
+- Die Vorschauzeile zeigt vor dem Speichern, was die Änderung bewirkt. Die Idee stammt von Time To Pet.
+- Mindestens eine Impfung muss angehakt bleiben, sonst gibt es nichts zu prüfen. Ob ein Verein ganz
+  ohne Impfpflicht vorkommt, ist offen (siehe Abschnitt 6).
 
 **Technisch:**
-- Die Einstellungen kommen in die vorhandene Tabelle `einstellung`, entweder als ein Schlüssel je
-  Anforderung (`pflicht_gueltig_l` = `pflicht|freiwillig|aus`) oder als ein JSON-Eintrag. Leere bzw.
-  Standardwerte werden wie bisher nicht gespeichert.
+- Die Auswahl kommt als ein Eintrag (`pflichtimpfungen`, Liste der Felder) in die vorhandene Tabelle
+  `einstellung`. Der Standard (alle vier) wird wie bisher nicht gespeichert.
 - Es gibt **keine neue Spalte und keine Migration**. Das Formatrisiko beim Update ist damit null.
-- Wirkt in `hund_ansicht()` (Gesamtstatus), `fehlende_angaben()` / `impf_punkte()`, `KENNZAHL_FILTER`,
-  `impfungen_faellig()` (`/nachweise`), `hund_form.html` und auf den Hundekarten.
-- Die Fotoeinwilligung wirkt zusätzlich auf `Person.foto_status` (Kachel „foto“).
-- Die Erkennung (`erkennung.py`) bleibt unverändert und schlägt weiter alle vier Impfungen vor. Ein
-  Vorschlag für eine ausgeblendete Impfung wird nur nicht angezeigt.
-- Tests: je Stufe ein Test für Gesamtstatus und Nachricht. Dazu ein Test, der prüft, dass beim
-  Ausblenden die Daten erhalten bleiben. Danach Windows-Test wie immer.
+- Eine Hilfsfunktion `pflichtimpfungen()` liefert die angehakten Einträge aus `IMPFUNGEN`. Alle Stellen,
+  die heute über `IMPFUNGEN` laufen, nehmen stattdessen diese Funktion: `hund_ansicht()`
+  (Gesamtstatus), `fehlende_angaben()` / `impf_punkte()`, `KENNZAHL_FILTER`, `impfungen_faellig()`
+  (`/nachweise`), `hund_form.html` und der Impfpass-Dialog.
+- Die Erkennung (`erkennung.py`) bleibt unverändert und liest weiter alle vier Impfungen. Ein Vorschlag
+  für eine nicht angehakte Impfung wird nur nicht angezeigt.
+- Tests: Gesamtstatus und Nachricht mit abgewählter Impfung. Dazu ein Test, der prüft, dass beim
+  Abwählen die Daten erhalten bleiben. Danach Windows-Test wie immer.
+- Haftpflicht, Geburtstag und Fotoeinwilligung könnten später genauso ein Häkchen bekommen. Das ist für
+  den ersten Schritt nicht nötig.
 
 ### Schritt 2 – Vorlauf und Begriffe (klein, optional)
 
@@ -208,25 +205,29 @@ Was verlangt euer Verein?                 Pflicht   Freiwillig   Ausblenden
   `get_status()` rechnet mit **1 Monat**, `ERINNERUNG_VORLAUF` mit **6 Wochen**. Das sollte ohnehin
   ein Wert werden.
 - **Tollwut-Ausnahme für Welpen** (Hundeschule PRO-DOG, StIKo: Tollwut frühestens mit 12 Wochen): Bis
-  zum Alter X ist eine Pflichtimpfung nur „freiwillig“. Das geht nur, wenn der Geburtstag bekannt ist.
+  zum Alter X wird eine Pflichtimpfung nicht nachgefragt. Das geht nur, wenn der Geburtstag bekannt ist.
 
-### Schritt 3 – Eigene Impfarten (nur bei echtem Bedarf)
+### Schritt 3 – Die Liste erweitern (nur bei echtem Bedarf)
 
-Erst wenn ein Verein eine fünfte Impfung braucht (zum Beispiel Borreliose, Leishmaniose oder Pi getrennt
-von Bb), reichen die vier festen Spalten nicht mehr. Dann gilt:
-- **Neue Tabelle** `impfung (hund_id, art, gueltig_bis, nachweis_id)` und eine Stammliste der Impfarten
-  in den Einstellungen (Name, Kürzel, Krankheiten, übliche Gültigkeit, Pflichtstufe, archiviert).
+Braucht ein Verein eine Impfung, die nicht auf der Liste steht (zum Beispiel Pi getrennt von Bb,
+Borreliose oder Leishmaniose), dann wird die Liste **in der App** erweitert. Die Vereine legen keine
+eigenen Impfungen an, sie haken nur aus einer festen Liste an. Das hält die Einstellungen einfach, und
+`impfstoffe.py` kann jede Impfung auf der Liste den Impfstoff-Aufklebern zuordnen. Eine neue Impfung ist
+dann nur eine neue Zeile dort, wie heute bei den Impfstoffen.
+
+Damit eine neue Zeile reicht, müssen die Impfdaten aus den vier festen Spalten am `Hund` heraus:
+- **Neue Tabelle** `impfung (hund_id, art, gueltig_bis, nachweis_id)`.
 - Eine **eigene Migration** mit Sicherung übernimmt die vier alten Spalten. Die alten Spalten bleiben
   stehen, wie bei `haftpflicht_nachweis`.
-- `impfstoffe.py` muss dann Aufkleber auf frei definierte Impfarten abbilden können. Die Erkennung
-  (`erkennung.py`) setzt heute die vier festen Felder voraus.
+- Die Erkennung (`erkennung.py`) setzt heute die vier festen Felder voraus und muss mit angepasst werden.
 
-Das ist der größte und riskanteste Umbau. Ich empfehle ihn **nicht**, solange niemand konkret danach fragt.
+Das ist der größte und riskanteste Umbau. Ich empfehle ihn erst, wenn ein Verein eine Impfung braucht,
+die auf der Liste fehlt.
 
 ### Schritt 4 – Gruppen und weitere Nachweise (Zukunft)
 
 - **Gruppen/Sparten je Hund** (Welpengruppe, Sport, Staffel, Besuchshunde), jede mit eigener Liste
-  „Pflicht/Freiwillig“. Bei MoeGo und DaySmart Pet ist das die Pflicht je Leistung. In keiner der
+  von Pflichtimpfungen. Bei MoeGo und DaySmart Pet ist das die Pflicht je Leistung. In keiner der
   untersuchten Platzordnungen unterscheiden sich die Impfregeln je Sparte. Ich erwarte den Bedarf
   deshalb vor allem bei gemischten Vereinen mit Staffel.
 - **Neue Nachweisarten** über `NACHWEIS_ARTEN`, ohne neue Tabelle:
@@ -242,12 +243,15 @@ Das ist der größte und riskanteste Umbau. Ich empfehle ihn **nicht**, solange 
 1. **Pi / „5-fach“:** In der App gehört Pi heute zur Impfung „BbPi“ (Zwingerhusten). Ein 5-fach-Impfstoff
    wie Nobivac SHPPi + L4 deckt Pi ab, aber nicht Bordetella. Ist für die Staffel wichtig, dass Pi
    *getrennt* erfasst wird? Laut BRH-, DRK- und DLRG-Ordnung ist Pi dort nicht verlangt. Dann reicht
-   „BbPi ausblenden“.
-2. **Ausblenden oder nur Freiwillig?** Soll eine nicht verlangte Impfung ganz verschwinden oder
-   sichtbar bleiben (grau, „freiwillig“)?
+   es, BbPi nicht anzuhaken.
+2. **Verein ganz ohne Impfpflicht?** Darf man alle Häkchen entfernen? Einige Platzordnungen verlangen
+   nur „geimpft“, ohne eine Krankheit zu nennen.
 3. **Zielbild „App für andere Vereine“:** Soll Schritt 1 schon mit Blick auf andere Vereine gebaut
-   werden, also mit Vorlagen, Vereinsname und Logo als Einstellung? Oder reicht es fürs Erste, dass
-   Saskia es für den HSV umstellen kann?
+   werden, also mit Vereinsname und Logo als Einstellung? Oder reicht es fürs Erste, dass Saskia es
+   für den HSV umstellen kann?
+
+*Entschieden (Kai, 2026-10-10):* Es gibt nur „Pflicht“ (angehakt) oder „nicht verlangt“ (ausgeblendet),
+keine dritte Stufe „freiwillig“ und keine Vorlagen. Die Vereine wählen aus einer festen Liste der App.
 
 ## Grenzen dieser Recherche
 
