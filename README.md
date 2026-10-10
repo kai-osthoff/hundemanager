@@ -6,6 +6,10 @@ Der Hundemanager läuft auf einem ganz normalen Windows-PC im Browser. Er zeigt 
 Hund etwas fehlt oder bald abläuft, und schreibt die Nachfrage an den Halter gleich selbst vor –
 per WhatsApp oder E-Mail, mit einem Klick. So bleibt mehr Zeit für die Hunde und weniger für Listen.
 
+> 💡 **Die Idee und die erste Version stammen von [Saskia](https://github.com/saskia190)**, die damit die
+> Hunde im [HSV Großbottwar e.V.](https://www.hsv-grossbottwar.de/) verwaltet – für diesen Verein ist der Hundemanager entstanden. Dieses Repository baut auf ihrer Version auf
+> ([Ausgangsstand](https://github.com/kai-osthoff/hundemanager/commit/7dbcd27)) und entwickelt sie weiter.
+
 ![Übersicht: Kennzahlen oben, darunter alle Halter mit ihren Hunden und dem Stand von Impfungen und Haftpflicht](docs/screenshots/uebersicht.png)
 
 <sub>Alle Screenshots zeigen erfundene Beispieldaten.</sub>
@@ -172,6 +176,25 @@ kannst du selbst sichern oder einen älteren Stand zurückholen.
 - **Der Hundemanager startet nicht oder Daten fehlen:** Unter *Dokumente\Hundemanager-Backups* liegt
   jede Sicherung mit deinen Daten (`hundemanager.db`) und dem Programm (`code.zip`).
 - **Bitte Bescheid geben**, am besten mit einem Foto vom schwarzen Fenster.
+
+---
+
+## Entstehung und Lizenz
+
+Der Hundemanager ist **Saskias Idee**: Sie hat die erste Version (v5) geschrieben, um im [HSV Großbottwar e.V.](https://www.hsv-grossbottwar.de/) den
+Überblick über Hunde, Impfungen und Haftpflicht zu behalten. Kai Osthoff hat diesen Stand übernommen
+und weiterentwickelt – Update per Knopfdruck, Sicherungen, Nachweise mit Erkennung, WhatsApp- und
+E-Mail-Nachfragen und vieles mehr. Saskia nutzt ihn weiterhin im Verein.
+
+Der Hundemanager ist **Open Source** unter der
+**[GNU Affero General Public License v3.0](LICENSE)** (AGPL-3.0):
+
+- Du darfst ihn frei nutzen, verändern und weitergeben – auch in deinem Verein.
+- Die **Namensnennung** (Saskia und Kai Osthoff) und der Lizenzhinweis müssen erhalten bleiben.
+- Abwandlungen müssen **ebenfalls Open Source** unter der AGPL-3.0 bleiben – auch dann, wenn sie anderen
+  nur als Web-Dienst zur Verfügung gestellt werden.
+
+Copyright © 2026 Saskia ([@saskia190](https://github.com/saskia190)) und Kai Osthoff
 
 ---
 

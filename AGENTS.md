@@ -2,6 +2,8 @@
 
 Flask-App (SQLite) zur Verwaltung von Hunden, Impfungen und Haftpflicht.
 Entwickelt wird von Kai, genutzt von Saskia.
+Idee und erste Version (v5, Commit `7dbcd27`) stammen von Saskia – in README und Lizenzhinweis immer nennen.
+Lizenz: AGPL-3.0 (`LICENSE`), Copyright Saskia und Kai Osthoff.
 
 > **Einzige Quelle der Projektregeln** – gilt für Codex, Claude Code und alle anderen
 > Agenten. `CLAUDE.md` importiert diese Datei nur (`@AGENTS.md`). Regeln immer **hier**
