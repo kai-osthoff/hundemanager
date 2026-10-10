@@ -121,6 +121,9 @@ Programm passiert erst nach einer geprüften Sicherung.**
 - Dateien liegen unveränderlich in `instance/nachweise/<sha256>.<pdf|jpg|png>` –
   nie überschreiben, nie löschen. Ein neuer Nachweis kommt *dazu*, alte bleiben als
   Historie. Korrigiert werden nur die Angaben in der Datenbank, nie die Datei.
+- **Löschen** (Nachweis und Fotoeinwilligung, für Dokumente beim falschen Hund/Halter): erst Sicherung
+  `vor-loeschen`, dann nur der Datenbank-Eintrag – die Datei bleibt in der Ablage. Impfdaten am Hund, die aus dem
+  gelöschten Pass stammen, fallen auf den spätesten anderen Pass zurück oder werden leer (`impfungen_zuruecknehmen`).
 - Sicherungen legen Nachweise in einer gemeinsamen Ablage `backup/nachweise/` ab
   (einmal pro Inhalt), das Manifest listet sie, `pruefe_backup()` prüft jede Datei.
   Diese Ablage wird nie aufgeräumt.

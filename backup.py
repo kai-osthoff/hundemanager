@@ -50,6 +50,7 @@ AUFBEWAHRUNG = {
     'manuell': 20,
     'vor-wiederherstellung': 10,
     'vor-migration': 10,
+    'vor-loeschen': 20,
 }
 ARTEN_TEXT = {
     'vor-update': 'Vor Update',
@@ -57,6 +58,7 @@ ARTEN_TEXT = {
     'manuell': 'Manuell',
     'vor-wiederherstellung': 'Vor Wiederherstellung',
     'vor-migration': 'Vor Datenbank-Anpassung',
+    'vor-loeschen': 'Vor dem Löschen',
 }
 
 # Nie in die Code-Sicherung und beim Zurückspielen nie überschreiben

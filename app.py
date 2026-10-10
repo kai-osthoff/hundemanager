@@ -1059,6 +1059,54 @@ def nachweis_bearbeiten(nachweis_id):
     return _angaben_seite(nachweis.hund, nachweis, nachweis.art, vorschlag, nachweis.seiten)
 
 
+def _vor_dem_loeschen_sichern():
+    """Löschen nur nach geprüfter Sicherung - so lässt es sich unter "Sicherungen" rückgängig machen.
+    Gibt eine Fehlermeldung zurück oder None."""
+    try:
+        _, spiegel_fehler = backup.erstelle_backup('vor-loeschen', LAUFENDE_VERSION)
+        if spiegel_fehler:
+            flash(spiegel_fehler, 'error')
+    except backup.BackupFehler as e:
+        return f'Sicherung fehlgeschlagen: {e} Es wurde nichts gelöscht.'
+    return None
+
+
+def impfungen_zuruecknehmen(hund, nachweis):
+    """Was am Hund aus diesem Nachweis stammt, fällt auf den nächstbesten anderen Impfpass zurück
+    (oder auf leer). Gibt die betroffenen Impfungen als lesbare Zeilen zurück."""
+    geaendert = []
+    for name, feld in IMPFUNGEN:
+        datum = nachweis.impf_daten.get(feld)
+        if not datum or getattr(hund, feld) != datum:
+            continue
+        andere = [n.impf_daten[feld] for n in hund.nachweise if n is not nachweis and feld in n.impf_daten]
+        setattr(hund, feld, max(andere) if andere else None)
+        geaendert.append(f'{name} jetzt {"bis " + format_datum(max(andere)) if andere else "nicht eingetragen"}')
+    return geaendert
+
+
+@app.route('/nachweis/<int:nachweis_id>/loeschen', methods=['POST'])
+def nachweis_loeschen(nachweis_id):
+    """Versehentlich beim falschen Hund hochgeladen? Eintrag weg - die Datei bleibt in der Ablage
+    und in den Sicherungen (nie löschen), sie wird nur nicht mehr angezeigt."""
+    nachweis = Nachweis.query.get_or_404(nachweis_id)
+    hund, art, art_name = nachweis.hund, nachweis.art, nachweis.art_name
+    fehler = _vor_dem_loeschen_sichern()
+    if fehler:
+        flash(fehler, 'error')
+        return redirect(url_for('hund_nachweise', hund_id=hund.id, art=art))
+    meldung = ''
+    if NACHWEIS_ARTEN.get(art, {}).get('impfungen'):
+        geaendert = impfungen_zuruecknehmen(hund, nachweis)
+        if geaendert:
+            meldung = ' Beim Hund zurückgenommen: ' + ', '.join(geaendert) + '.'
+    db.session.delete(nachweis)
+    db.session.commit()
+    flash(f'{art_name}-Nachweis bei {hund.name} gelöscht.{meldung} '
+          f'Rückgängig machen geht unter „Sicherungen“ (Sicherung „Vor dem Löschen“).', 'success')
+    return redirect(url_for('hund_nachweise', hund_id=hund.id, art=art))
+
+
 @app.route('/nachweis/<int:nachweis_id>/ansehen')
 def nachweis_ansehen(nachweis_id):
     """Alle Seiten eines Nachweises richtig herum - mit Drehknöpfen und Link zum Original."""
@@ -1217,6 +1265,24 @@ def fotoeinwilligung_widerrufen(einwilligung_id):
     db.session.commit()
     flash(f'Widerruf vom {format_datum(einwilligung.widerrufen_am)} vermerkt – '
           f'Fotos von {person.vollstaendiger_name} nicht mehr verwenden.', 'success')
+    return redirect(url_for('fotoeinwilligung', person_id=person.id))
+
+
+@app.route('/fotoeinwilligung/<int:einwilligung_id>/loeschen', methods=['POST'])
+def fotoeinwilligung_loeschen(einwilligung_id):
+    """Beim falschen Halter hochgeladen? Eintrag weg - die Datei bleibt in Ablage und Sicherungen.
+    Für einen echten Widerruf gibt es "Widerruf vermerken"."""
+    einwilligung = Fotoeinwilligung.query.get_or_404(einwilligung_id)
+    person = einwilligung.person
+    fehler = _vor_dem_loeschen_sichern()
+    if fehler:
+        flash(fehler, 'error')
+        return redirect(url_for('fotoeinwilligung', person_id=person.id))
+    person.fotofreigabe = any(e is not einwilligung and not e.widerrufen_am for e in person.fotoeinwilligungen)
+    db.session.delete(einwilligung)
+    db.session.commit()
+    flash(f'Fotoeinwilligung bei {person.vollstaendiger_name} gelöscht. '
+          f'Rückgängig machen geht unter „Sicherungen“ (Sicherung „Vor dem Löschen“).', 'success')
     return redirect(url_for('fotoeinwilligung', person_id=person.id))
 
 

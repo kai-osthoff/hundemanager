@@ -120,6 +120,10 @@
                     <div class="person-actions">
                         <a href="{{ url_for('nachweis_ansehen', nachweis_id=n.id) }}" target="_blank" class="knopf">Ansehen</a>
                         <a href="{{ url_for('nachweis_bearbeiten', nachweis_id=n.id) }}" class="knopf">Korrigieren</a>
+                        <form action="{{ url_for('nachweis_loeschen', nachweis_id=n.id) }}" method="POST"
+                              onsubmit="return confirm('Diesen {{ n.art_name }}-Nachweis bei {{ hund.name }} löschen?\n\nGedacht für Dokumente, die beim falschen Hund gelandet sind. Vorher wird gesichert – unter „Sicherungen“ lässt es sich zurückholen.');">
+                            <button type="submit" class="knopf knopf-gefahr">Löschen</button>
+                        </form>
                     </div>
                 </td>
             </tr>
@@ -131,5 +135,6 @@
 </div>
 <p style="text-align: center; color: #55625A; font-size: 0.85rem;">
     Alle Nachweise bleiben dauerhaft gespeichert und werden mitgesichert – auch abgelaufene.
+    „Löschen“ nur für Dokumente, die beim falschen Hund gelandet sind.
 </p>
 {% endblock %}

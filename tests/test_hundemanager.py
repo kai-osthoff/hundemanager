@@ -1907,6 +1907,19 @@ class FotoeinwilligungTests(unittest.TestCase):
         with closing(sqlite3.connect(self.db)) as v:
             self.assertEqual(v.execute('SELECT fotofreigabe FROM person WHERE id = 1').fetchone(), (0,))
 
+    def test_beim_falschen_halter_hochgeladen_loeschen(self):
+        foto = b'\xff\xd8\xff\xe0' + b'Einwilligung-Test' * 40
+        self.hochladen(2, foto, 'Einwilligung.jpg')
+        self.assertIn('Fotoeinwilligung ✓', self.oeffne('/').decode('utf-8'))
+        seite = self.oeffne('/fotoeinwilligung/1/loeschen', b'').decode('utf-8')
+        self.assertIn('Fotoeinwilligung bei Saskia Test gelöscht', seite)
+        self.assertIn('Noch keine unterschriebene Einwilligung', seite)
+        with closing(sqlite3.connect(self.db)) as v:
+            self.assertEqual(v.execute('SELECT COUNT(*) FROM fotoeinwilligung').fetchone(), (0,))
+            self.assertEqual(v.execute('SELECT fotofreigabe FROM person WHERE id = 2').fetchone(), (0,))
+        sha = __import__('hashlib').sha256(foto).hexdigest()
+        self.assertTrue(os.path.exists(os.path.join(self.app_dir, 'instance', 'nachweise', sha + '.jpg')))
+
     def test_falsche_datei_und_datum_in_der_zukunft(self):
         seite = self.hochladen(2, b'MZ\x90\x00', 'virus.exe')
         self.assertIn('Bitte ein PDF oder ein Foto', seite)
@@ -2188,6 +2201,41 @@ class ImpfpassOberflaecheTests(unittest.TestCase):
         self.assertEqual(self.hund('gueltig_t'), (neu.isoformat(),))
         # Beide Nachweise bleiben in der Historie
         self.assertEqual(self.oeffne('/hund/1/nachweise?art=impfpass').decode('utf-8').count('Korrigieren'), 2)
+
+    def test_falsch_hochgeladenen_nachweis_loeschen(self):
+        """Pass beim falschen Hund: löschen nimmt seine Impfdaten zurück, Datei und Sicherung bleiben."""
+        richtig = date.today() + timedelta(days=100)
+        falsch = date.today() + timedelta(days=500)
+        fotos = {}
+        for datum, name in ((richtig, 'richtig.jpg'), (falsch, 'falsch.jpg')):
+            fotos[name] = textfoto('felder', 0) + name.encode()
+            koerper, typ = multipart_mehrere([('art', 'impfpass')], [('datei', name, fotos[name])])
+            seite = self.oeffne('/hund/1/nachweise/hochladen', koerper, typ).decode('utf-8')
+            sha = re.search(r'name="sha256" value="([0-9a-f]{64})"', seite).group(1)
+            self.oeffne('/hund/1/nachweise/speichern', urllib.parse.urlencode([
+                ('art', 'impfpass'), ('sha256', sha), ('endung', 'jpg'), ('original_name', name),
+                ('drehung', '0'), ('impf_gueltig_t', datum.isoformat()),
+                ('impf_gueltig_l', datum.isoformat())]).encode())
+        self.assertEqual(self.hund('gueltig_t', 'gueltig_l'), (falsch.isoformat(), falsch.isoformat()))
+        self.assertIn('Löschen', self.oeffne('/hund/1/nachweise?art=impfpass').decode('utf-8'))
+
+        # Den falschen löschen: T und L fallen auf den anderen Pass zurück
+        seite = self.oeffne('/nachweis/2/loeschen', b'').decode('utf-8')
+        self.assertIn('Impfpass-Nachweis bei Bello gelöscht', seite)
+        self.assertIn(f'T jetzt bis {richtig.strftime("%d.%m.%Y")}', seite)
+        self.assertEqual(self.hund('gueltig_t', 'gueltig_l'), (richtig.isoformat(), richtig.isoformat()))
+        self.assertEqual(seite.count('Korrigieren'), 1)
+        # Den letzten auch: L ist dann leer, SHP (nicht aus einem Pass) bleibt
+        seite = self.oeffne('/nachweis/1/loeschen', b'').decode('utf-8')
+        self.assertIn('L jetzt nicht eingetragen', seite)
+        self.assertEqual(self.hund('gueltig_shp_dap_dhp', 'gueltig_t', 'gueltig_l'), ('2027-01-01', None, None))
+        with closing(sqlite3.connect(self.db)) as v:
+            self.assertEqual(v.execute('SELECT COUNT(*) FROM nachweis').fetchone(), (0,))
+        # Dateien bleiben in der Ablage, vorher wurde gesichert
+        for foto in fotos.values():
+            sha = __import__('hashlib').sha256(foto).hexdigest()
+            self.assertTrue(os.path.exists(os.path.join(self.app_dir, 'instance', 'nachweise', sha + '.jpg')))
+        self.assertIn('Vor dem Löschen', self.oeffne('/sicherungen').decode('utf-8'))
 
 
 class ImpfpassUebergangTests(unittest.TestCase):
