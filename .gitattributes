@@ -1,1 +1,3 @@
 *.bat text eol=crlf
+# Screenshots nur für die GitHub-Seite - nicht im Update-Paket (zipball) mitliefern
+docs/screenshots/ export-ignore

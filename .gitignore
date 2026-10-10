@@ -19,3 +19,6 @@ dist/
 
 # Arbeitsordner von windows-test.sh
 .windows-test/
+
+# Screenshots für die GitHub-Seite (nur erfundene Demo-Daten)
+!docs/screenshots/*.png
