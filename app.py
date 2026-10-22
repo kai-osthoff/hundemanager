@@ -23,6 +23,7 @@ import erkennung
 import impfstoffe
 import mailto
 import nachweise
+import trainerliste
 import updater
 import whatsapp
 
@@ -1472,6 +1473,42 @@ def export_excel():
         as_attachment=True,
         download_name=f'hundeuebersicht_{date.today().strftime("%Y-%m-%d")}.xlsx'
     )
+
+
+def trainer_zeilen():
+    """Eine Zeile je Hund aktiver Halter für die Übersicht für Trainer - Reihenfolge wie die Übersicht."""
+    personen = Person.query.filter_by(aktiv=True).order_by(
+        func.lower(Person.nachname), func.lower(Person.vorname)).all()
+    zeilen = []
+    for person in personen:
+        for hund in sorted(person.hunde, key=lambda h: h.name.lower()):
+            ansicht = hund_ansicht(hund)
+            zeilen.append({
+                'halter': person.vollstaendiger_name,
+                'hund': hund.name,
+                'impfungen': [{'name': i['name'], 'status': i['status'], 'datum': i['datum']}
+                              for i in ansicht['impfungen']],
+                'haftpflicht': {'status': ansicht['haftpflicht'],
+                                'datum': ansicht['nachweis'].gueltig_bis if ansicht['nachweis'] else None},
+                'foto': person.foto_status,
+            })
+    return zeilen
+
+
+@app.route('/export/trainer.pdf')
+def export_trainer_pdf():
+    """Übersicht für Trainer als PDF: Ampeln je Hund, danach die Einzelheiten mit Datum."""
+    heute = date.today()
+    return send_file(io.BytesIO(trainerliste.pdf(trainer_zeilen(), heute)), mimetype='application/pdf',
+                     as_attachment=True, download_name=f'trainer-uebersicht_{heute.isoformat()}.pdf')
+
+
+@app.route('/export/trainer.png')
+def export_trainer_png():
+    """Übersicht für Trainer als Bild (nur die Ampeln) - zum Teilen in WhatsApp."""
+    heute = date.today()
+    return send_file(io.BytesIO(trainerliste.png(trainer_zeilen(), heute)), mimetype='image/png',
+                     as_attachment=True, download_name=f'trainer-uebersicht_{heute.isoformat()}.png')
 
 
 

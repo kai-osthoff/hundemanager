@@ -86,6 +86,14 @@ Wer der Veröffentlichung von Fotos zugestimmt hat, steht direkt am Halter („F
 Fehlt sie, schickt ein Klick den Link zum Formular per WhatsApp. Ein Widerruf wird vermerkt – danach
 wird nicht mehr gefragt.
 
+### Übersicht für Trainer: wer darf auf den Platz?
+
+Ein Knopf in der Kopfzeile erzeugt eine Liste für die anderen Trainer – als **PDF** oder als **Bild für
+WhatsApp**. Je Hund steht eine Ampel für Impfung und Haftpflicht, dazu der Stand der Fotoeinwilligung
+(Fotos erlaubt, noch erbitten oder deutlich sichtbar: nicht abbilden). Das PDF listet auf einer zweiten
+Seite je Hund, was fehlt oder abläuft – mit Datum, damit man das Mitglied direkt ansprechen kann. Das Bild
+enthält nur die Ampeln, keine Daten.
+
 ### Einstellungen, Excel und Farbschema
 
 ![Einstellungen: Farbschema, Link zum Formular für die Fotoeinwilligung, Ansprechpartner für Kontaktdaten](docs/screenshots/einstellungen.png)

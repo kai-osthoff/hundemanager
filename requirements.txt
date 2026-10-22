@@ -8,3 +8,5 @@ Pillow==12.3.0
 # Texterkennung für Impfpass-Fotos - läuft lokal, Modelle stecken im Paket (kein Download)
 rapidocr==3.9.2
 onnxruntime==1.30.0
+# PDF für die Übersicht für Trainer - reines Python, keine Systemabhängigkeiten
+fpdf2==2.8.9

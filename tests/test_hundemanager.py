@@ -2301,6 +2301,152 @@ class ImpfpassUebergangTests(unittest.TestCase):
         self.assertEqual(self.oeffne('/nachweis/1/datei'), self.foto)  # Datei unverändert
 
 
+class TrainerlisteTests(unittest.TestCase):
+    """Übersicht für Trainer: Ampeln, Einzelheiten und beide Dateiformen - ohne laufende App."""
+
+    IMPFUNGEN = ('SHP/DAP/DHP', 'L', 'BbPi', 'T')
+
+    def setUp(self):
+        self.tl = lade_modul(os.path.join(REPO, 'trainerliste.py'), 'trainerliste_test')
+        self.stand = date(2026, 10, 22)
+
+    def zeile(self, halter='Jürgen Müller', hund='Bello', impf=('gueltig',) * 4, daten=None,
+              haft=('gueltig', date(2027, 5, 1)), foto='nachgewiesen'):
+        daten = daten or [date(2027, 1, 1)] * 4
+        return {'halter': halter, 'hund': hund,
+                'impfungen': [{'name': n, 'status': s, 'datum': d} for n, s, d in zip(self.IMPFUNGEN, impf, daten)],
+                'haftpflicht': {'status': haft[0], 'datum': haft[1]}, 'foto': foto}
+
+    def pdf_text(self, daten):
+        import pypdf
+        leser = pypdf.PdfReader(io.BytesIO(daten))
+        return len(leser.pages), '\n'.join(seite.extract_text() for seite in leser.pages)
+
+    def test_ampel_impfung_und_haftpflicht(self):
+        ampel = self.tl.ampel
+        self.assertEqual(ampel(self.zeile())['impfung'], 'ok')
+        self.assertEqual(ampel(self.zeile(impf=('gueltig', 'bald-ablaufend', 'gueltig', 'gueltig')))['impfung'], 'bald')
+        self.assertEqual(ampel(self.zeile(impf=('gueltig', 'bald-ablaufend', 'abgelaufen', 'gueltig')))['impfung'], 'fehlt')
+        self.assertEqual(ampel(self.zeile(impf=('gueltig', 'keine-angabe', 'gueltig', 'gueltig')))['impfung'], 'fehlt')
+        for status, erwartet in [('gueltig', 'ok'), ('bald-ablaufend', 'bald'), ('abgelaufen', 'fehlt'),
+                                 ('keine-angabe', 'fehlt'), ('ohne-nachweis', 'fehlt')]:
+            self.assertEqual(ampel(self.zeile(haft=(status, None)))['haftpflicht'], erwartet, status)
+
+    def test_ampel_fotoeinwilligung_ist_kein_trainingskriterium(self):
+        for status, erwartet in [('nachgewiesen', 'erlaubt'), ('ohne-nachweis', 'erlaubt'),
+                                 ('fehlt', 'offen'), ('widerrufen', 'nein')]:
+            self.assertEqual(self.tl.ampel(self.zeile(foto=status))['foto'], erwartet, status)
+
+    def test_punkte_nur_abweichungen_mit_datum(self):
+        punkte = self.tl.punkte
+        self.assertEqual(punkte(self.zeile()), [])
+        zeile = self.zeile(impf=('abgelaufen', 'keine-angabe', 'bald-ablaufend', 'gueltig'),
+                           daten=[date(2026, 9, 3), None, date(2026, 11, 12), date(2027, 1, 1)],
+                           haft=('bald-ablaufend', date(2026, 11, 15)), foto='fehlt')
+        self.assertEqual(punkte(zeile), [
+            ('fehlt', 'Impfung SHP/DAP/DHP: abgelaufen am 03.09.2026'),
+            ('fehlt', 'Impfung L: Datum fehlt'),
+            ('bald', 'Impfung BbPi: läuft am 12.11.2026 ab'),
+            ('bald', 'Haftpflicht: Nachweis läuft am 15.11.2026 ab'),
+            ('offen', 'Fotoeinwilligung: liegt nicht vor - bitte darum bitten'),
+        ])
+        self.assertEqual(punkte(self.zeile(haft=('keine-angabe', None))), [('fehlt', 'Haftpflicht: kein Nachweis')])
+        self.assertEqual(punkte(self.zeile(haft=('ohne-nachweis', None))),
+                         [('fehlt', 'Haftpflicht: nur angegeben, Nachweis fehlt')])
+        self.assertEqual(punkte(self.zeile(haft=('abgelaufen', date(2026, 1, 2)))),
+                         [('fehlt', 'Haftpflicht: Nachweis abgelaufen am 02.01.2026')])
+        self.assertEqual(punkte(self.zeile(foto='widerrufen')), [('nein', 'Fotoeinwilligung: NEIN - nicht abbilden')])
+        self.assertEqual(punkte(self.zeile(foto='ohne-nachweis')),
+                         [('erlaubt', 'Fotoeinwilligung: laut Angabe erlaubt, Formular fehlt noch')])
+
+    def test_pdf_mit_uebersicht_und_einzelheiten(self):
+        zeilen = [self.zeile(),
+                  self.zeile(hund='Luna', impf=('gueltig', 'gueltig', 'gueltig', 'bald-ablaufend'),
+                             daten=[date(2027, 1, 1)] * 3 + [date(2026, 11, 12)]),
+                  self.zeile(halter='Zoë Weiß', hund='Fiete', haft=('keine-angabe', None), foto='widerrufen')]
+        daten = self.tl.pdf(zeilen, self.stand)
+        self.assertTrue(daten.startswith(b'%PDF'))
+        seiten, text = self.pdf_text(daten)
+        self.assertEqual(seiten, 2)
+        for erwartet in ('Übersicht für Trainer', 'Stand 22.10.2026', 'Jürgen Müller', 'Bello', 'Luna', 'Zoë Weiß',
+                         'Fiete', 'Fotoeinwilligung', 'Seite 1/2', 'Einzelheiten',
+                         'Impfung T: läuft am 12.11.2026 ab', 'Haftpflicht: kein Nachweis',
+                         'NEIN - nicht abbilden', 'Seite 2/2'):
+            self.assertIn(erwartet, text)
+        self.assertEqual(text.count('Bello'), 1)  # ohne Abweichung nicht im Detailteil
+
+    def test_pdf_ohne_abweichungen_und_ohne_hunde(self):
+        seiten, text = self.pdf_text(self.tl.pdf([self.zeile()], self.stand))
+        self.assertEqual(seiten, 1)
+        self.assertNotIn('Einzelheiten', text)
+        seiten, text = self.pdf_text(self.tl.pdf([], self.stand))
+        self.assertEqual(seiten, 1)
+        self.assertIn('Keine aktiven Hunde', text)
+
+    def test_pdf_viele_hunde_mehrseitig(self):
+        zeilen = [self.zeile(halter=f'Halter {i:02d}', hund=f'Hund {i:02d}', foto='fehlt') for i in range(80)]
+        seiten, text = self.pdf_text(self.tl.pdf(zeilen, self.stand))
+        self.assertGreaterEqual(seiten, 4)
+        self.assertIn('Hund 79', text)
+        self.assertIn('Halter 79', text)
+        self.assertIn(f'Seite {seiten}/{seiten}', text)
+
+    def test_png_waechst_mit_den_zeilen(self):
+        from PIL import Image
+        klein = Image.open(io.BytesIO(self.tl.png([self.zeile()], self.stand)))
+        gross = Image.open(io.BytesIO(self.tl.png([self.zeile(hund=f'Hund {i}') for i in range(30)], self.stand)))
+        self.assertEqual(klein.format, 'PNG')
+        self.assertEqual((klein.width, gross.width), (1200, 1200))
+        self.assertGreater(gross.height, klein.height + 29 * 20)
+
+    def test_ohne_systemschrift(self):
+        from PIL import Image
+        self.tl.schriftart = lambda: None
+        seiten, text = self.pdf_text(self.tl.pdf([self.zeile()], self.stand))
+        self.assertIn('Jürgen Müller', text)
+        self.assertEqual(Image.open(io.BytesIO(self.tl.png([self.zeile()], self.stand))).width, 1200)
+
+
+class TrainerUebersichtTests(unittest.TestCase):
+    """Dialog in der Übersicht und beide Downloads über die laufende App."""
+
+    setUp = HaftpflichtOberflaecheTests.setUp
+    tearDown = HaftpflichtOberflaecheTests.tearDown
+    oeffne = HaftpflichtOberflaecheTests.oeffne
+
+    def pdf_text(self):
+        import pypdf
+        with self.browser.open(f'http://127.0.0.1:{self.port}/export/trainer.pdf', timeout=30) as antwort:
+            daten, kopf = antwort.read(), antwort.headers
+        self.assertTrue(daten.startswith(b'%PDF'))
+        self.assertIn(f'trainer-uebersicht_{date.today().isoformat()}.pdf', kopf['Content-Disposition'])
+        return '\n'.join(seite.extract_text() for seite in pypdf.PdfReader(io.BytesIO(daten)).pages)
+
+    def test_dialog_und_downloads(self):
+        seite = self.oeffne('/').decode('utf-8')
+        self.assertIn('Übersicht für Trainer', seite)
+        self.assertIn('/export/trainer.pdf', seite)
+        self.assertIn('/export/trainer.png', seite)
+
+        text = self.pdf_text()
+        self.assertLess(text.index('Müller'), text.index('Saskia Test'))
+        self.assertLess(text.index('Saskia Test'), text.index('Weiß'))
+        self.assertIn('Bello', text)
+        self.assertIn('Impfung L: Datum fehlt', text)
+        self.assertIn('Haftpflicht: nur angegeben, Nachweis fehlt', text)
+        self.assertIn('Fotoeinwilligung: liegt nicht vor', text)
+        self.assertNotIn('Spezial', text)      # Bemerkung bleibt draußen
+        self.assertNotIn('01.01.2020', text)   # Geburtstag auch
+
+        with self.browser.open(f'http://127.0.0.1:{self.port}/export/trainer.png', timeout=30) as antwort:
+            self.assertTrue(antwort.read().startswith(b'\x89PNG'))
+            self.assertIn(f'trainer-uebersicht_{date.today().isoformat()}.png', antwort.headers['Content-Disposition'])
+
+        # Pausierte Halter fehlen
+        self.oeffne('/person/3/toggle_aktiv', b'')
+        self.assertNotIn('Weiß', self.pdf_text())
+
+
 def html_unescape(text):
     import html
     return html.unescape(text)

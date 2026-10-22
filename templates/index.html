@@ -8,6 +8,11 @@
     <a href="{{ url_for('export_excel') }}" class="btn-rund btn-umriss btn-symbol" title="Excel-Export" aria-label="Excel-Export">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3h7v18h-7M14 8h7M14 13h7M17.5 3v18"/><path d="M3 5l11-2v18L3 19zM6 9l5 6M11 9l-5 6"/></svg>
     </a>
+    {# Ohne JavaScript landet der Klick direkt beim PDF #}
+    <a href="{{ url_for('export_trainer_pdf') }}" class="btn-rund btn-umriss btn-symbol" title="Übersicht für Trainer (PDF oder Bild)" aria-label="Übersicht für Trainer"
+       onclick="var d = document.getElementById('trainer-dialog'); if (d && d.showModal) { d.showModal(); return false; }">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M11 8h6M11 12h6M11 16h6"/><circle cx="7.5" cy="8" r="1" fill="currentColor"/><circle cx="7.5" cy="12" r="1" fill="currentColor"/><circle cx="7.5" cy="16" r="1" fill="currentColor"/></svg>
+    </a>
 </div>
 {% endblock %}
 
@@ -211,6 +216,20 @@
 </div>
 {% endfor %}
 </div>
+
+{# Übersicht für Trainer: wer darf auf den Platz - als PDF mit Einzelheiten oder als Bild für WhatsApp #}
+<dialog id="trainer-dialog" class="einstellungen-dialog" aria-labelledby="trainer-titel">
+    <h2 id="trainer-titel">Übersicht für Trainer</h2>
+    <p>Wer darf auf den Platz? Je Hund eine Ampel für Impfung und Haftpflicht, dazu der Stand der Fotoeinwilligung
+        (Fotos erlaubt, noch erbitten oder <strong>nicht abbilden</strong>). Nur aktive Halter, Stand heute.</p>
+    <p style="margin-top: 10px;"><strong>PDF:</strong> Übersicht plus Einzelheiten je Hund - was fehlt oder abläuft, mit Datum.<br>
+        <strong>Bild:</strong> nur die Übersicht, ohne Daten - zum Teilen in WhatsApp.</p>
+    <div class="dialog-aktionen">
+        <button type="button" class="btn btn-secondary" onclick="this.closest('dialog').close();">Schließen</button>
+        <a href="{{ url_for('export_trainer_png') }}" class="btn btn-secondary" onclick="this.closest('dialog').close();">Bild für WhatsApp</a>
+        <a href="{{ url_for('export_trainer_pdf') }}" class="btn btn-primary" onclick="this.closest('dialog').close();">PDF herunterladen</a>
+    </div>
+</dialog>
 
 {# Auf Hund oder Halter fallengelassene Dateien: fragen, was es ist, dann zum passenden Hochladen #}
 <dialog id="ablage-dialog" class="einstellungen-dialog ablage-dialog" aria-labelledby="ablage-titel">
