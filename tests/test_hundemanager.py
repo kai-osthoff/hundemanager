@@ -1398,10 +1398,31 @@ class WhatsAppTests(unittest.TestCase):
         self.assertNotIn(' mit ', self.wa.fotoeinwilligung_nachricht('A', [], link).split('\n')[2])
 
     def test_nachricht_nennt_alle_punkte(self):
-        text = self.wa.fehlende_daten_nachricht('Jürgen', 'Bello', ['Impfung L: Datum fehlt noch', 'Geburtstag'])
+        text = self.wa.nachfrage_nachricht(self.wa.VORLAGE_NACHFRAGE, 'Jürgen', 'Bello',
+                                           ['Impfung L: Datum fehlt noch', 'Geburtstag'])
         self.assertTrue(text.startswith('Hallo Jürgen,'))
-        self.assertIn('für Bello', text)
+        self.assertIn('bei Bello fehlt mir noch etwas oder ist abgelaufen:', text)
         self.assertIn('• Impfung L: Datum fehlt noch\n• Geburtstag', text)
+        self.assertIn('hier per WhatsApp', text)
+        self.assertNotIn('{', text)
+        erinnerung = self.wa.nachfrage_nachricht(self.wa.VORLAGE_ERINNERUNG, 'Jürgen', 'Bello',
+                                                 ['Impfung T: läuft am 01.12.2026 ab'], 'email')
+        self.assertIn('bei Bello läuft bald etwas ab:\n• Impfung T: läuft am 01.12.2026 ab', erinnerung)
+        self.assertIn('als Antwort auf diese E-Mail', erinnerung)
+        self.assertNotIn('fehlt', erinnerung)
+
+    def test_eigene_vorlage_mit_platzhaltern(self):
+        # Groß-/Kleinschreibung egal, unbekannte Platzhalter und einzelne Klammern bleiben Text
+        text = self.wa.nachfrage_nachricht('Hi {Vorname}! {HUND}: {punkte} {antwortweg} {x} { y } {',
+                                           'Zoë', 'Rex', ['a', 'b'])
+        self.assertEqual(text, 'Hi Zoë! Rex: • a\n• b hier per WhatsApp {x} { y } {')
+        self.assertIsNone(self.wa.vorlage_fehler(self.wa.VORLAGE_ERINNERUNG))
+        self.assertIsNone(self.wa.vorlage_fehler(self.wa.VORLAGE_NACHFRAGE))
+        self.assertIsNone(self.wa.vorlage_fehler('Hallo {Vorname}, {PUNKTE} - {'))
+        fehler = self.wa.vorlage_fehler('Hallo {vorname}, {hundi} {punkte} {Punkt}')
+        self.assertIn('unbekannte Platzhalter {Punkt}, {hundi}', fehler)
+        self.assertIn('{antwortweg}', fehler)
+        self.assertIn('{punkte} muss drin bleiben', self.wa.vorlage_fehler('Hallo {vorname}'))
 
     def test_kontaktdaten_nachricht_an_ansprechpartner(self):
         text = self.wa.kontaktdaten_nachricht('Erika Beispiel', 'Jürgen Müller', ['Bello', 'Luna'])
@@ -1476,7 +1497,7 @@ class WhatsAppOberflaecheTests(unittest.TestCase):
 
         texte = nachrichtentexte()
         for kanal in ('WhatsApp', 'E-Mail'):
-            for betreff in ('fehlen mir noch', 'Impfpass etwas', 'Einwilligung'):
+            for betreff in ('fehlt mir noch etwas', 'Einwilligung'):
                 self.assertTrue(any(betreff in t and kanal in t for t in texte), (kanal, betreff))
         self.assertTrue(all(t.startswith('Hallo Jürgi,') for t in texte))
 
@@ -1505,7 +1526,7 @@ class WhatsAppOberflaecheTests(unittest.TestCase):
         for l in links:
             abfrage = urllib.parse.parse_qs(urllib.parse.urlparse(l).query)
             if 'text' in abfrage and 'Einwilligung' not in abfrage['text'][0]:
-                texte[re.search(r'für (\w+)', abfrage['text'][0]).group(1)] = abfrage['text'][0]
+                texte[re.search(r'bei (\w+)', abfrage['text'][0]).group(1)] = abfrage['text'][0]
         self.assertEqual(set(texte), {'Bello', 'Luna'})  # Rex/Fiete: Halter ohne Nummer
         self.assertIn('Hallo Jürgen,', texte['Luna'])
         self.assertIn('• Impfung SHP/DAP/DHP: Datum fehlt noch', texte['Luna'])
@@ -1606,12 +1627,12 @@ class MailtoTests(unittest.TestCase):
 
     def test_texte_fuer_email(self):
         wa = lade_modul(os.path.join(REPO, 'whatsapp.py'), 'whatsapp_test')
-        for text in (wa.fehlende_daten_nachricht('A', 'Bello', ['Geburtstag'], 'email'),
-                     wa.impfpass_nachricht('A', 'Bello', ['Impfung L: Datum fehlt noch'], 'email'),
+        for text in (wa.nachfrage_nachricht(wa.VORLAGE_NACHFRAGE, 'A', 'Bello', ['Geburtstag'], 'email'),
+                     wa.nachfrage_nachricht(wa.VORLAGE_ERINNERUNG, 'A', 'Bello', ['Impfung L: läuft am 01.12.2026 ab'], 'email'),
                      wa.fotoeinwilligung_nachricht('A', ['Bello'], 'https://example.org/f.pdf', 'email')):
             self.assertIn('als Antwort auf diese E-Mail', text)
             self.assertNotIn('WhatsApp', text)
-        self.assertIn('hier per WhatsApp', wa.fehlende_daten_nachricht('A', 'Bello', ['Geburtstag']))
+        self.assertIn('hier per WhatsApp', wa.nachfrage_nachricht(wa.VORLAGE_NACHFRAGE, 'A', 'Bello', ['Geburtstag']))
 
 
 class EmailOberflaecheTests(unittest.TestCase):
@@ -1964,6 +1985,103 @@ class FotoeinwilligungTests(unittest.TestCase):
         self.assertIn(self.STANDARD_LINK, self.oeffne('/einstellungen').decode('utf-8'))
 
 
+class NachrichtenVorlagenTests(unittest.TestCase):
+    """Erinnerung (nur bald fällig) oder Nachfrage (etwas fehlt/abgelaufen) - mit Saskias Vorlagen aus den Einstellungen."""
+
+    setUp = HaftpflichtOberflaecheTests.setUp
+    tearDown = HaftpflichtOberflaecheTests.tearDown
+    oeffne = HaftpflichtOberflaecheTests.oeffne
+    person_speichern = WhatsAppOberflaecheTests.person_speichern
+
+    def nachrichten(self, hund='Bello'):
+        """Texte der WhatsApp-/E-Mail-Links zu einem Hund: Hundekarte (Übersicht) und Impfpass-Seite -
+        ohne die Fotoeinwilligung, die den Hund auch nennt."""
+        texte = []
+        for pfad in ('/', '/hund/1/nachweise?art=impfpass'):
+            for link in re.findall(r'href="([^"]+)"', self.oeffne(pfad).decode('utf-8')):
+                link = html_unescape(link)
+                if link.startswith(('https://web.whatsapp.com/', 'mailto:')):
+                    abfrage = urllib.parse.parse_qs(urllib.parse.urlparse(link).query)
+                    texte.extend(abfrage.get('text', []) + abfrage.get('body', []))
+        # mailto-Körper haben \r\n (RFC 6068) - für den Vergleich wie WhatsApp lesen
+        return [t.replace('\r\n', '\n') for t in texte if hund in t and 'Einwilligung' not in t]
+
+    def bello_fast_vollstaendig(self):
+        """Bello: alle Impfungen gültig, Tollwut in drei Wochen fällig, Haftpflicht-Nachweis da."""
+        self.person_speichern(1, mobil='0171 1234567', email='juergen@example.org')
+        weit = (date.today() + timedelta(days=365)).isoformat()
+        bald = (date.today() + timedelta(days=21)).isoformat()
+        self.oeffne('/hund/1/bearbeiten', urllib.parse.urlencode(
+            dict(name='Bello', geburtstag='2020-01-01', haftpflicht_gueltig='ja', gueltig_shp_dap_dhp=weit,
+                 gueltig_l=weit, gueltig_bbpi=weit, gueltig_t=bald)).encode())
+        koerper, typ = multipart('datei', 'Test.pdf', test_pdf(bestaetigung_zeilen(date.today())))
+        seite = self.oeffne('/hund/1/haftpflicht/hochladen', koerper, typ).decode('utf-8')
+        sha = re.search(r'name="sha256" value="([0-9a-f]{64})"', seite).group(1)
+        self.oeffne('/hund/1/haftpflicht/speichern', urllib.parse.urlencode(
+            dict(sha256=sha, endung='pdf', original_name='Test.pdf', gueltig_bis=weit)).encode())
+        return date.fromisoformat(bald).strftime('%d.%m.%Y')
+
+    def test_erinnerung_wenn_nur_etwas_bald_ablaeuft(self):
+        bald = self.bello_fast_vollstaendig()
+        seite = self.oeffne('/').decode('utf-8')
+        self.assertIn('1 läuft bald ab – erinnern', seite)
+        self.assertIn('Freundliche Erinnerung per WhatsApp erinnern', seite)
+        texte = self.nachrichten()
+        self.assertEqual(len(texte), 4)  # Hundekarte WhatsApp + E-Mail, Impfpass-Nachfrage WhatsApp + E-Mail
+        for text in texte:
+            self.assertTrue(text.startswith('Hallo Jürgen,\n\nbei Bello läuft bald etwas ab:\n'
+                                            f'• Impfung T: läuft am {bald} ab\n'), text)
+            self.assertNotIn('fehlt', text)
+        self.assertIn('subject=Bello%3A%20Erinnerung', self.oeffne('/').decode('utf-8'))
+
+        # Mischfall: dazu fehlt Leptospirose - jetzt eine klare Nachfrage, die beides nennt
+        with closing(sqlite3.connect(self.db)) as v:
+            v.execute('UPDATE hund SET gueltig_l = NULL WHERE id = 1')
+            v.commit()
+        seite = self.oeffne('/').decode('utf-8')
+        self.assertIn('2 Angaben fehlen – anfragen', seite)
+        self.assertIn('subject=Bello%3A%20fehlende%20Angaben', seite)
+        for text in self.nachrichten():
+            self.assertIn('bei Bello fehlt mir noch etwas oder ist abgelaufen:\n'
+                          f'• Impfung L: Datum fehlt noch\n• Impfung T: läuft am {bald} ab', text)
+        # Luna (alles fehlt) war immer schon eine Nachfrage
+        self.assertTrue(all('fehlt mir noch etwas' in t for t in self.nachrichten('Luna')))
+
+    def test_eigene_vorlagen_in_den_einstellungen(self):
+        bald = self.bello_fast_vollstaendig()
+        seite = self.oeffne('/').decode('utf-8')
+        for schluessel in ('nachricht_erinnerung', 'nachricht_nachfrage'):
+            self.assertIn(f'id="einstellung-{schluessel}"', seite)
+            self.assertIn(f'data-vorlage-vorschau="{schluessel}"', seite)
+        self.assertIn('Hallo Max,\n\nbei Bello läuft bald etwas ab:\n• Impfung Tollwut: läuft am', seite)
+        self.assertIn('Hallo Max,\n\nbei Bello fehlt mir noch etwas oder ist abgelaufen:\n• Impfung L: Datum fehlt noch', seite)
+        # Beispielpunkte für die Live-Vorschau (Skript in base.html): eine Zeile je Punkt
+        self.assertIn('data-punkte="Impfung L: Datum fehlt noch\nHaftpflicht: Nachweis abgelaufen am', seite)
+        self.assertIn('data-vorlage-einfuegen="nachricht_nachfrage">{antwortweg}</button>', seite)
+
+        # Windows-Browser schicken \r\n - gespeichert wird \n; Groß-/Kleinschreibung der Platzhalter ist egal
+        vorlage = 'Hi {Vorname},\r\nbei {hund} wird es Zeit:\r\n{punkte}\r\nLG Saskia'
+        self.oeffne('/einstellungen', urllib.parse.urlencode({'nachricht_erinnerung': vorlage}).encode())
+        with closing(sqlite3.connect(self.db)) as v:
+            self.assertEqual(v.execute("SELECT wert FROM einstellung WHERE schluessel = 'nachricht_erinnerung'").fetchone()[0],
+                             vorlage.replace('\r\n', '\n'))
+        texte = self.nachrichten()
+        self.assertEqual(texte[0], f'Hi Jürgen,\nbei Bello wird es Zeit:\n• Impfung T: läuft am {bald} ab\nLG Saskia')
+        seite = self.oeffne('/').decode('utf-8')
+        self.assertIn('bei Bello wird es Zeit:', seite)  # Formular zeigt die eigene Vorlage
+
+        # Tippfehler im Platzhalter oder fehlendes {punkte}: nicht gespeichert, Fehler genannt
+        for kaputt, meldung in (('Hallo {vornme} {punkte}', 'unbekannte Platzhalter {vornme}'),
+                                ('Hallo {vorname}, schau mal nach', '{punkte} muss drin bleiben')):
+            seite = self.oeffne('/einstellungen', urllib.parse.urlencode({'nachricht_nachfrage': kaputt}).encode()).decode('utf-8')
+            self.assertIn(meldung, html_unescape(seite))
+        self.assertTrue(all('wird es Zeit' in t for t in self.nachrichten()))
+
+        # Leer oder "Alles auf Standard" = Standardtext
+        self.oeffne('/einstellungen', b'standard=1')
+        self.assertTrue(all('läuft bald etwas ab' in t for t in self.nachrichten()))
+
+
 class ThemeTests(unittest.TestCase):
     """Farbschema in den Einstellungen: Türkis als Standard, das bisherige Grün wählbar."""
 
@@ -2154,7 +2272,7 @@ class ImpfpassOberflaecheTests(unittest.TestCase):
         self.assertIn(f'• Impfung T: abgelaufen am {t_bis.strftime("%d.%m.%Y")}', text)
         self.assertIn('• Impfung BbPi: Datum fehlt noch', text)
         self.assertNotIn('Impfung L:', text)
-        self.assertIn('Foto der Impfpass-Seite', text)
+        self.assertIn('Foto vom Impfpass', text)
         # ... und in der Liste der fälligen Impfungen
         seite = self.oeffne('/nachweise').decode('utf-8')
         self.assertIn('Impfungen abgelaufen oder bald fällig', seite)

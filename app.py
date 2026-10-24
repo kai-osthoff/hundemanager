@@ -313,6 +313,18 @@ EINSTELLUNGEN = {
         'art': 'tel',
         'platzhalter': 'z. B. 0171 1234567',
     },
+    'nachricht_erinnerung': {
+        'name': 'Nachricht „Erinnerung“',
+        'hilfe': 'Geht raus, wenn bei einem Hund nur etwas bald abläuft – nichts fehlt, nichts ist abgelaufen.',
+        'standard': whatsapp.VORLAGE_ERINNERUNG,
+        'art': 'vorlage',
+    },
+    'nachricht_nachfrage': {
+        'name': 'Nachricht „Nachfrage“',
+        'hilfe': 'Geht raus, sobald etwas fehlt oder abgelaufen ist – auch wenn daneben etwas nur bald fällig ist.',
+        'standard': whatsapp.VORLAGE_NACHFRAGE,
+        'art': 'vorlage',
+    },
     'theme': {
         'name': 'Farbschema',
         'hilfe': 'Wie der Hundemanager aussieht. Die Daten bleiben gleich.',
@@ -437,13 +449,12 @@ def hund_ansicht(hund):
         haftpflicht = 'keine-angabe'
 
     nachfragen = fehlende_angaben(hund, impfungen, haftpflicht, nachweis)
+    ton = nachricht_ton(impfungen, haftpflicht, hund.geburtstag)
     whatsapp_nachfrage = email_nachfrage = None
     if nachfragen:
-        whatsapp_nachfrage = whatsapp.link(hund.besitzer.mobil, whatsapp.fehlende_daten_nachricht(
-            hund.besitzer.ansprache, hund.name, nachfragen))
-        email_nachfrage = mailto.link(hund.besitzer.email, f'{hund.name}: fehlende Angaben',
-                                      whatsapp.fehlende_daten_nachricht(
-                                          hund.besitzer.ansprache, hund.name, nachfragen, 'email'))
+        whatsapp_nachfrage = whatsapp.link(hund.besitzer.mobil, nachfrage_text(ton, hund, nachfragen))
+        email_nachfrage = mailto.link(hund.besitzer.email, f'{hund.name}: {BETREFF[ton]}',
+                                      nachfrage_text(ton, hund, nachfragen, 'email'))
 
     stati = [i['status'] for i in impfungen] + [haftpflicht]
     if 'abgelaufen' in stati:
@@ -463,6 +474,7 @@ def hund_ansicht(hund):
         'gesamt': gesamt,
         'gesamt_text': GESAMT_TEXT[gesamt],
         'nachfragen': nachfragen,
+        'ton': ton,
         'handlungsbedarf': hund.wiedervorlage_am <= heute if hund.wiedervorlage_am else gesamt != 'ok',
         'wiedervorlage_faellig': bool(hund.wiedervorlage_am and hund.wiedervorlage_am <= heute),
         'whatsapp_nachfrage': whatsapp_nachfrage,
@@ -520,13 +532,31 @@ def impf_punkte(impfungen):
     return punkte
 
 
+def nachricht_ton(impfungen, haftpflicht='gueltig', geburtstag=True):
+    """Welche Vorlage die Nachricht an den Halter bekommt: 'erinnerung', wenn nur etwas bald
+    abläuft - 'nachfrage', sobald etwas fehlt oder abgelaufen ist (auch neben Bald-Fälligem)."""
+    dringend = any(i['status'] in ('keine-angabe', 'abgelaufen') for i in impfungen) \
+        or haftpflicht in ('keine-angabe', 'ohne-nachweis', 'abgelaufen') or not geburtstag
+    return 'nachfrage' if dringend else 'erinnerung'
+
+
+# Betreff der E-Mail je Vorlage
+BETREFF = {'erinnerung': 'Erinnerung', 'nachfrage': 'fehlende Angaben'}
+
+
+def nachfrage_text(ton, hund, punkte, kanal='whatsapp'):
+    """Nachricht an den Halter aus der Vorlage in den Einstellungen."""
+    return whatsapp.nachfrage_nachricht(einstellung('nachricht_' + ton), hund.besitzer.ansprache,
+                                        hund.name, punkte, kanal)
+
+
 def impf_nachfrage(hund, impfungen, kanal='whatsapp'):
     """WhatsApp- bzw. E-Mail-Link: Bitte um ein Foto der Impfpass-Seite - None, wenn alles
     gültig ist oder Handynummer bzw. Adresse fehlen."""
     punkte = impf_punkte(impfungen)
     if not punkte:
         return None
-    text = whatsapp.impfpass_nachricht(hund.besitzer.ansprache, hund.name, punkte, kanal)
+    text = nachfrage_text(nachricht_ton(impfungen), hund, punkte, kanal)
     if kanal == 'email':
         return mailto.link(hund.besitzer.email, f'{hund.name}: Impfpass', text)
     return whatsapp.link(hund.besitzer.mobil, text)
@@ -1307,6 +1337,10 @@ def _einstellung_pruefen(schluessel, wert):
     if EINSTELLUNGEN[schluessel]['art'] == 'auswahl' and wert and wert not in EINSTELLUNGEN[schluessel]['optionen']:
         return f'{EINSTELLUNGEN[schluessel]["name"]}: bitte einen Eintrag aus der Liste wählen.'
     info = EINSTELLUNGEN[schluessel]
+    if info['art'] == 'vorlage' and wert:
+        fehler = whatsapp.vorlage_fehler(wert)
+        if fehler:
+            return f'{info["name"]}: {fehler}'
     if info['art'] == 'zahl' and wert:
         if not re.fullmatch(r'[0-9]+', wert) or not 1 <= int(wert) <= info['maximum']:
             return f'{info["name"]}: bitte eine ganze Zahl zwischen 1 und {info["maximum"]} eingeben.'
@@ -1328,7 +1362,7 @@ def link_anzeige(link):
 @app.route('/einstellungen', methods=['GET', 'POST'])
 def einstellungen():
     if request.method == 'POST':
-        werte = {s: request.form.get(s, '').strip() for s in EINSTELLUNGEN}
+        werte = {s: request.form.get(s, '').replace('\r\n', '\n').strip() for s in EINSTELLUNGEN}
         if request.form.get('standard'):
             werte = {s: '' for s in EINSTELLUNGEN}  # leer = Standard
         fehler = [f for f in (_einstellung_pruefen(s, w) for s, w in werte.items()) if f]
@@ -1593,6 +1627,15 @@ def update_kontext():
 KONTAKTDATEN_VORNAME_MARKE = '\x00vorname\x00'
 
 
+def vorlagen_beispiel():
+    """Beispielwerte, mit denen der Einstellungsdialog die Nachrichten-Vorlagen vorführt."""
+    heute = date.today()
+    return {'vorname': 'Max', 'hund': 'Bello', 'antwortweg': whatsapp.ANTWORT_WEG['whatsapp'],
+            'punkte': {'erinnerung': [f'Impfung Tollwut: läuft am {format_datum(heute + timedelta(days=21))} ab'],
+                       'nachfrage': ['Impfung L: Datum fehlt noch',
+                                     f'Haftpflicht: Nachweis abgelaufen am {format_datum(heute - timedelta(days=50))}']}}
+
+
 @app.context_processor
 def einstellungen_kontext():
     # Für den Einstellungsdialog im Kopf jeder Seite
@@ -1602,7 +1645,16 @@ def einstellungen_kontext():
             # Beispiel der Anfrage an den Ansprechpartner - der Vorname wird im Dialog live eingesetzt
             'kontaktdaten_beispiel': whatsapp.kontaktdaten_nachricht(
                 KONTAKTDATEN_VORNAME_MARKE, 'Max Mustermann', ['Bello']),
-            'kontaktdaten_vorname_marke': KONTAKTDATEN_VORNAME_MARKE}
+            'kontaktdaten_vorname_marke': KONTAKTDATEN_VORNAME_MARKE,
+            'vorlagen_beispiel': vorlagen_beispiel(),
+            'vorlagen_platzhalter': whatsapp.PLATZHALTER}
+
+
+@app.template_filter('nachricht_beispiel')
+def nachricht_beispiel(vorlage, punkte):
+    """Vorlage mit den Beispielwerten ausgefüllt - die Vorschau im Einstellungsdialog."""
+    beispiel = vorlagen_beispiel()
+    return whatsapp.nachfrage_nachricht(vorlage, beispiel['vorname'], beispiel['hund'], punkte)
 
 
 @app.context_processor

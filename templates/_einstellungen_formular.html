@@ -1,6 +1,7 @@
 {# Formular für Einstellungsdialog und Einstellungsseite. Erwartet: werte, einstellungen_info, zurueck
    Gegliedert in Abschnitte: Aussehen (Karten mit Vorschau), Formular Fotoeinwilligung (Dokument-Karte),
-   Ansprechpartner für Kontaktdaten (mit Vorschau der WhatsApp-Anfrage). Live-Vorschau: Skript in base.html. #}
+   Ansprechpartner für Kontaktdaten (mit Vorschau der WhatsApp-Anfrage), Nachrichten-Vorlagen (Textfeld,
+   Platzhalter-Chips, Vorschau). Live-Vorschau: Skript in base.html. #}
 {% set theme = einstellungen_info.theme %}
 {% set link_info = einstellungen_info.fotoeinwilligung_link %}
 {% set link = werte.fotoeinwilligung_link or link_info.standard %}
@@ -92,6 +93,48 @@
         <div class="einst-hinweis" data-kontakt="hinweis"{% if name and mobil %} hidden{% endif %}>
             Name und Handynummer gehören zusammen. Erst wenn beides da ist, erscheint bei Haltern ohne
             Kontaktdaten der Knopf „Kontaktdaten anfragen“.
+        </div>
+    </section>
+
+    <section class="einst-abschnitt">
+        <h3>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1.4-4.2A8 8 0 1 1 8.3 20.7z"/><path d="M9 10h6M9 13.5h4"/></svg>
+            Nachrichten an Halter
+        </h3>
+        <p>Der Hundemanager sucht die passende Vorlage selbst aus: <strong>Erinnerung</strong>, wenn nur etwas bald
+            abläuft – <strong>Nachfrage</strong>, sobald etwas fehlt oder schon abgelaufen ist (auch im Mischfall).
+            Die Platzhalter in geschweiften Klammern füllt die App beim Öffnen von WhatsApp oder E-Mail aus.</p>
+        {% for schluessel, farbe in (('nachricht_erinnerung', 'bald'), ('nachricht_nachfrage', 'abgelaufen')) %}
+        {% set info = einstellungen_info[schluessel] %}
+        {% set vorlage = werte[schluessel] or info.standard %}
+        {% set punkte = vorlagen_beispiel.punkte[schluessel[10:]] %}
+        <div class="vorlage-karte">
+            <div class="vorlage-kopf">
+                <label for="einstellung-{{ schluessel }}"><span class="vorlage-punkt vorlage-punkt-{{ farbe }}" aria-hidden="true"></span>{{ info.name }}</label>
+                <button type="button" class="knopf" data-vorlage-standard="{{ schluessel }}">Standardtext einsetzen</button>
+            </div>
+            <small>{{ info.hilfe }}</small>
+            <textarea id="einstellung-{{ schluessel }}" name="{{ schluessel }}" rows="9" data-vorlage="{{ schluessel }}"
+                      data-standard="{{ info.standard }}" data-punkte="{{ punkte | join('\n') }}">{{ werte[schluessel] or '' }}</textarea>
+            <div class="vorlage-chips">
+                <span>Einfügen:</span>
+                {% for name in vorlagen_platzhalter %}
+                <button type="button" class="vorlage-chip" data-vorlage-einfuegen="{{ schluessel }}">{{ '{' ~ name ~ '}' }}</button>
+                {% endfor %}
+            </div>
+            <div class="whatsapp-vorschau">
+                <div class="whatsapp-vorschau-kopf">
+                    <span>So kommt sie an</span>
+                    <span>Beispiel: {{ vorlagen_beispiel.vorname }} mit {{ vorlagen_beispiel.hund }}</span>
+                </div>
+                <div class="whatsapp-blase" data-vorlage-vorschau="{{ schluessel }}">{{ vorlage | nachricht_beispiel(punkte) }}</div>
+            </div>
+        </div>
+        {% endfor %}
+        <div class="einst-hinweis einst-hinweis-ruhig">
+            {% for name, erklaerung in vorlagen_platzhalter.items() %}<strong>{{ '{' ~ name ~ '}' }}</strong> = {{ erklaerung }}{% if not loop.last %} · {% endif %}{% endfor %}.
+            Ein Tippfehler in einem Platzhalter wird beim Speichern gemeldet; {{ '{punkte}' }} muss drin bleiben.
+            Leer = Standardtext.
         </div>
     </section>
 

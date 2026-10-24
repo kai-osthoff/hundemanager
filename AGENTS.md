@@ -185,6 +185,15 @@ Programm passiert erst nach einer geprüften Sicherung.**
   `49171…`; deutsche Nummern ohne Vorwahl gelten als +49) und `email`.
 - Hundekarten mit fehlenden/abgelaufenen/bald fälligen Angaben bekommen eine vorausgefüllte
   Nachfrage (`fehlende_angaben()` in app.py). Datenschutz: echte Nummern nie in Tests.
+- **Vorlagen (Saskias Wortlaut):** Die Nachrichten von der Hundekarte und zum Impfpass kommen aus zwei
+  Vorlagen in den Einstellungen (`nachricht_erinnerung`, `nachricht_nachfrage`, Art `vorlage`, Standard
+  `whatsapp.VORLAGE_*`). `nachricht_ton()` wählt: **Erinnerung**, wenn nur etwas bald abläuft –
+  **Nachfrage**, sobald etwas fehlt oder abgelaufen ist (auch im Mischfall; die Punkte stehen dann alle in
+  einer Liste). Platzhalter `{vorname}`, `{hund}`, `{punkte}`, `{antwortweg}` (`whatsapp.PLATZHALTER`,
+  Groß-/Kleinschreibung egal, einzelne Klammern bleiben Text); `vorlage_fehler()` lehnt unbekannte
+  Platzhalter und Vorlagen ohne `{punkte}` ab. Die übrigen Nachrichten (Foto nachfordern, Fotoeinwilligung,
+  Kontaktdaten) sind fest. Textfelder: `\r\n` aus Windows-Browsern wird beim Speichern zu `\n`.
+  Hundekarte: „n läuft bald ab – erinnern“ (`ton == 'erinnerung'`) statt „n Angaben fehlen – anfragen“.
 - Halter ohne Handynummer **und** E-Mail (`Person.kontaktdaten_fehlen`): Knopf „Kontaktdaten bei … anfragen“
   schickt per WhatsApp eine Bitte an den Ansprechpartner im Vorstand (`kontaktdaten_name`/`kontaktdaten_mobil`
   in `EINSTELLUNGEN`, nur beide zusammen). Ist keiner eingetragen, öffnet der Knopf den Einstellungsdialog.

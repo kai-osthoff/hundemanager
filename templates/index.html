@@ -168,19 +168,26 @@
 
             {% if h.nachfragen %}
             {% set anzahl = h.nachfragen|length %}
-            <div class="nachfrage" title="{{ h.nachfragen|join(' · ') }}">
+            {% if h.ton == 'erinnerung' %}
+                {% set zaehler = anzahl ~ (' läuft bald ab' if anzahl == 1 else ' laufen bald ab') %}
+                {% set aktion, wofuer = 'erinnern', 'Freundliche Erinnerung' %}
+            {% else %}
+                {% set zaehler = anzahl ~ (' Angabe fehlt' if anzahl == 1 else ' Angaben fehlen') %}
+                {% set aktion, wofuer = 'anfragen', 'Fehlende Angaben' %}
+            {% endif %}
+            <div class="nachfrage nachfrage-{{ h.ton }}" title="{{ h.nachfragen|join(' · ') }}">
                 {% if h.whatsapp_nachfrage or h.email_nachfrage %}
-                <span>{{ anzahl }} {{ 'Angabe fehlt' if anzahl == 1 else 'Angaben fehlen' }} – anfragen</span>
+                <span>{{ zaehler }} – {{ aktion }}</span>
                 {% if h.whatsapp_nachfrage %}
                 <a data-wiedervorlage-link="{{ hund.id }}" href="{{ h.whatsapp_nachfrage }}" target="whatsapp" rel="noopener" class="mini mini-icon mini-wa"
-                   aria-label="Fehlende Angaben per WhatsApp anfragen" title="Fehlende Angaben per WhatsApp anfragen">{{ icon_wa }}</a>
+                   aria-label="{{ wofuer }} per WhatsApp {{ aktion }}" title="{{ wofuer }} per WhatsApp {{ aktion }}">{{ icon_wa }}</a>
                 {% endif %}
                 {% if h.email_nachfrage %}
                 <a data-wiedervorlage-link="{{ hund.id }}" href="{{ h.email_nachfrage }}" class="mini mini-icon mini-mail"
-                   aria-label="Fehlende Angaben per E-Mail anfragen" title="Fehlende Angaben per E-Mail anfragen">{{ icon_mail }}</a>
+                   aria-label="{{ wofuer }} per E-Mail {{ aktion }}" title="{{ wofuer }} per E-Mail {{ aktion }}">{{ icon_mail }}</a>
                 {% endif %}
                 {% else %}
-                <span>{{ anzahl }} {{ 'Angabe fehlt' if anzahl == 1 else 'Angaben fehlen' }} –
+                <span>{{ zaehler }} –
                     <a href="{{ url_for('person_bearbeiten', person_id=person.id) }}" title="Für eine WhatsApp-Nachfrage fehlt die Handynummer.">Nummer eintragen</a></span>
                 {% endif %}
             </div>

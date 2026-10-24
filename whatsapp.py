@@ -53,25 +53,54 @@ def link(handynummer, text=''):
     return WEB_ADRESSE + '?' + urllib.parse.urlencode(parameter, quote_via=urllib.parse.quote)
 
 
-def fehlende_daten_nachricht(vorname, hundename, punkte, kanal='whatsapp'):
-    """Freundliche Bitte um die fehlenden Angaben. punkte: Liste kurzer Zeilen."""
-    zeilen = [f'Hallo {vorname},', '',
-              f'für {hundename} fehlen mir noch ein paar Angaben:']
-    zeilen += [f'• {p}' for p in punkte]
-    zeilen += ['', f'Schick mir einfach ein Foto vom Impfpass bzw. den Nachweis {ANTWORT_WEG[kanal]}.',
-               '', 'Danke und viele Grüße', ABSENDER]
-    return '\n'.join(zeilen)
+# Vorlagen für die Nachrichten von der Hundekarte und zum Impfpass. Saskia passt sie im
+# Einstellungsdialog an (EINSTELLUNGEN in app.py, leer = diese Standardtexte). Die App wählt:
+# Erinnerung, wenn nur etwas bald abläuft - Nachfrage, sobald etwas fehlt oder abgelaufen ist.
+PLATZHALTER = {
+    'vorname': 'Rufname oder Vorname des Halters',
+    'hund': 'Name des Hundes',
+    'punkte': 'was fällig ist – eine Zeile je Punkt',
+    'antwortweg': '„hier per WhatsApp“ bzw. „als Antwort auf diese E-Mail“',
+}
+VORLAGE_ERINNERUNG = f'''Hallo {{vorname}},
+
+bei {{hund}} läuft bald etwas ab:
+{{punkte}}
+
+Das ist nur eine kleine Erinnerung. Sobald die Auffrischung bzw. der neue Nachweis da ist, schick mir einfach ein Foto {{antwortweg}}.
+
+Danke und viele Grüße
+{ABSENDER}'''
+VORLAGE_NACHFRAGE = f'''Hallo {{vorname}},
+
+bei {{hund}} fehlt mir noch etwas oder ist abgelaufen:
+{{punkte}}
+
+Schick mir bitte ein Foto vom Impfpass bzw. den Nachweis {{antwortweg}}.
+
+Danke und viele Grüße
+{ABSENDER}'''
+
+# {vorname}, {Hund} ... - Groß-/Kleinschreibung ist egal; einzelne Klammern bleiben Text
+_PLATZHALTER_MUSTER = re.compile(r'\{([^{}\s]+)\}')
 
 
-def impfpass_nachricht(vorname, hundename, punkte, kanal='whatsapp'):
-    """Bitte um ein Foto der Impfpass-Seite, wenn Impfungen abgelaufen, bald fällig oder unbekannt sind."""
-    zeilen = [f'Hallo {vorname},', '',
-              f'bei {hundename} ist im Impfpass etwas abgelaufen, bald fällig oder mir noch nicht bekannt:']
-    zeilen += [f'• {p}' for p in punkte]
-    zeilen += ['', f'Bitte schick mir ein Foto der Impfpass-Seite mit der aktuellen Impfung {ANTWORT_WEG[kanal]} '
-               '– bei einer Auffrischung gern, sobald sie gemacht ist.',
-               '', 'Danke und viele Grüße', ABSENDER]
-    return '\n'.join(zeilen)
+def vorlage_fehler(vorlage):
+    """Fehlermeldung, wenn eine Vorlage unbekannte Platzhalter hat oder {punkte} fehlt - sonst None."""
+    unbekannt = sorted({p for p in _PLATZHALTER_MUSTER.findall(vorlage) if p.lower() not in PLATZHALTER})
+    if unbekannt:
+        return ('unbekannte Platzhalter ' + ', '.join('{' + p + '}' for p in unbekannt)
+                + ' – es gibt nur ' + ', '.join('{' + p + '}' for p in PLATZHALTER) + '.')
+    if '{punkte}' not in vorlage.lower():
+        return 'der Platzhalter {punkte} muss drin bleiben, sonst erfährt der Halter nicht, worum es geht.'
+    return None
+
+
+def nachfrage_nachricht(vorlage, vorname, hundename, punkte, kanal='whatsapp'):
+    """Vorlage ausfüllen: Erinnerung oder Nachfrage an den Halter. punkte: Liste kurzer Zeilen."""
+    werte = {'vorname': vorname, 'hund': hundename,
+             'punkte': '\n'.join(f'• {p}' for p in punkte), 'antwortweg': ANTWORT_WEG[kanal]}
+    return _PLATZHALTER_MUSTER.sub(lambda m: werte.get(m.group(1).lower(), m.group(0)), vorlage)
 
 
 def impfpass_foto_nachricht(vorname, hundename, punkte, kanal='whatsapp'):

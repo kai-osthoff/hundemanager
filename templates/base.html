@@ -947,6 +947,19 @@
         .whatsapp-vorschau-kopf > span:first-child { font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
         .whatsapp-blase { align-self: flex-end; max-width: 88%; background: #D9FDD3; border-radius: 10px 0 10px 10px; padding: 10px 12px; font-size: 0.9rem; line-height: 1.45; color: #111B21; white-space: pre-line; box-shadow: 0 1px 1px rgba(0, 0, 0, 0.08); }
         .einst-hinweis { border: 1px dashed #E0A100; background: #FFF8E6; border-radius: 10px; padding: 12px 14px; font-size: 0.9rem; color: #5A3B00; }
+        .einst-hinweis-ruhig { border-color: #B9D9D6; background: #F2F7F6; color: #3F4A44; font-size: 0.85rem; line-height: 1.5; }
+        .vorlage-karte { border: 1px solid #CFD8D2; border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; background: #FFFFFF; }
+        .vorlage-kopf { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+        .vorlage-kopf label { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+        .vorlage-punkt { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+        .vorlage-punkt-bald { background: #E0A100; }
+        .vorlage-punkt-abgelaufen { background: #C62828; }
+        .vorlage-karte textarea { width: 100%; box-sizing: border-box; border: 1px solid #CFD8D2; border-radius: 8px; padding: 10px 12px; font: inherit; font-size: 0.92rem; line-height: 1.5; color: #15201A; resize: vertical; }
+        .vorlage-karte textarea:focus { outline: 2px solid #00A3A3; outline-offset: 1px; }
+        .vorlage-chips { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.8rem; color: #55625A; }
+        .vorlage-chip { border: 1px solid #B9D9D6; background: #EAF5F4; color: #13716C; border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 0.8rem; cursor: pointer; }
+        .vorlage-chip:hover { background: #D6ECEA; }
+        .nachfrage-erinnerung { color: #5A3B00; }
         .einst-fuss { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 16px 0 24px; border-top: 1px solid #E3E8E4; }
         .einst-dialog .einst-fuss { margin: 0 -28px; padding: 16px 28px; background: #FAFBFA; }
         .einst-fuss-rechts { display: flex; gap: 10px; }
@@ -1120,6 +1133,18 @@
             var html = document.documentElement, theme = html.getAttribute('data-theme');
             var feld = function (n) { return form.querySelector('[name="' + n + '"]'); };
             var teil = function (n) { return form.querySelector('[data-kontakt="' + n + '"]'); };
+            // Nachrichten-Vorlagen: Platzhalter mit den Beispielwerten füllen - wie whatsapp.nachfrage_nachricht
+            var beispiel = {vorname: {{ vorlagen_beispiel.vorname | tojson }}, hund: {{ vorlagen_beispiel.hund | tojson }},
+                            antwortweg: {{ vorlagen_beispiel.antwortweg | tojson }}};
+            function vorschau(textarea) {
+                var ziel = form.querySelector('[data-vorlage-vorschau="' + textarea.dataset.vorlage + '"]');
+                if (!ziel) return;
+                var werte = Object.assign({punkte: textarea.dataset.punkte.split('\n').map(function (p) { return '• ' + p; }).join('\n')}, beispiel);
+                var vorlage = textarea.value.trim() || textarea.dataset.standard;
+                ziel.textContent = vorlage.replace(/\{([^{}\s]+)\}/g, function (ganz, name) {
+                    return werte.hasOwnProperty(name.toLowerCase()) ? werte[name.toLowerCase()] : ganz;
+                });
+            }
             function aktualisieren() {
                 var auswahl = form.querySelector('[name="theme"]:checked');
                 if (auswahl) html.setAttribute('data-theme', auswahl.value);
@@ -1128,9 +1153,20 @@
                 teil('mobil').textContent = mobil;
                 teil('vorschau').hidden = !(name && mobil);
                 teil('hinweis').hidden = !!(name && mobil);
+                form.querySelectorAll('textarea[data-vorlage]').forEach(vorschau);
             }
             form.addEventListener('input', aktualisieren);
             form.addEventListener('change', aktualisieren);
+            // Platzhalter-Chip fügt an der Schreibmarke ein, "Standardtext einsetzen" ersetzt den Text
+            form.addEventListener('click', function (ereignis) {
+                var chip = ereignis.target.closest('[data-vorlage-einfuegen]'), standard = ereignis.target.closest('[data-vorlage-standard]');
+                if (!chip && !standard) return;
+                var textarea = form.querySelector('textarea[data-vorlage="' + (chip ? chip.dataset.vorlageEinfuegen : standard.dataset.vorlageStandard) + '"]');
+                if (chip) textarea.setRangeText(chip.textContent, textarea.selectionStart, textarea.selectionEnd, 'end');
+                else textarea.value = textarea.dataset.standard;
+                textarea.focus();
+                aktualisieren();
+            });
             var dialog = form.closest('dialog');
             if (dialog) dialog.addEventListener('close', function () {
                 form.reset();
